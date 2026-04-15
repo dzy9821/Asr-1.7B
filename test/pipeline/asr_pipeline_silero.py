@@ -1,8 +1,9 @@
 """
 ASR pipeline with Silero VAD.
 """
-import os
 import sys
+
+import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
@@ -10,6 +11,8 @@ from models.itn.itn_wrapper import ITNProcessor
 from models.vad.silero_vad_wrapper import SileroVAD
 
 from pipeline_common import (
+    DEFAULT_ASR_CONTEXT,
+    DEFAULT_VAD_MIN_SILENCE_DURATION_MS,
     asr_recognize,
     create_asr_client,
     encode_audio_segment_to_data_url,
@@ -18,14 +21,6 @@ from pipeline_common import (
     run_pipeline,
     vad_split_audio,
 )
-
-
-def _get_env_float(name, default=0.0):
-    value = os.getenv(name)
-    if value is None or not value.strip():
-        return default
-    return float(value)
-
 
 def main(
     audio_path,
@@ -38,17 +33,15 @@ def main(
     asr_system_prompt=None,
 ):
     if asr_context is None:
-        asr_context = os.getenv("ASR_CONTEXT")
+        asr_context = DEFAULT_ASR_CONTEXT
 
     if asr_hotwords is None:
-        asr_hotwords = os.getenv("ASR_HOTWORDS")
+        asr_hotwords = None
     if asr_system_prompt is None:
-        asr_system_prompt = os.getenv("ASR_SYSTEM_PROMPT")
+        asr_system_prompt = None
 
     if vad_min_silence_duration_ms is None:
-        vad_min_silence_duration_ms = _get_env_float(
-            "VAD_MIN_SILENCE_DURATION_MS", 0.0
-        )
+        vad_min_silence_duration_ms = DEFAULT_VAD_MIN_SILENCE_DURATION_MS
 
     vad_model = SileroVAD(
         min_silence_duration_ms=vad_min_silence_duration_ms,

@@ -9,6 +9,10 @@ import re
 import numpy as np
 
 
+DEFAULT_ASR_CONTEXT = "热词：120、急救中心、北京路、广东路、喜来顺酒店"
+DEFAULT_VAD_MIN_SILENCE_DURATION_MS = 300.0
+
+
 def clear_proxy_env():
     for key in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"):
         os.environ.pop(key, None)
