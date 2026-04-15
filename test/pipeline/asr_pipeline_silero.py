@@ -25,7 +25,14 @@ def main(
     asr_model="Qwen3-ASR-1.7B",
     asr_base_url="http://148.148.52.127:15002/v1",
     asr_api_key="EMPTY",
+    asr_hotwords=None,
+    asr_system_prompt=None,
 ):
+    if asr_hotwords is None:
+        asr_hotwords = os.getenv("ASR_HOTWORDS")
+    if asr_system_prompt is None:
+        asr_system_prompt = os.getenv("ASR_SYSTEM_PROMPT")
+
     vad_model = SileroVAD()
     itn_model = ITNProcessor()
     return run_pipeline(
@@ -35,6 +42,8 @@ def main(
         asr_model=asr_model,
         asr_base_url=asr_base_url,
         asr_api_key=asr_api_key,
+        asr_hotwords=asr_hotwords,
+        asr_system_prompt=asr_system_prompt,
     )
 
 
@@ -42,4 +51,3 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         raise SystemExit("Usage: python asr_pipeline_silero.py <audio_path>")
     print(main(sys.argv[1]))
-
