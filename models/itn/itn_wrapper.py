@@ -7,12 +7,36 @@ import os
 class ITNProcessor:
     """ITN (Inverse Text Normalization) 处理器"""
 
-    def __init__(self, model_path=None):
+    def __init__(self, model_path=None, lang="zh"):
         if model_path is None:
             model_path = os.path.join(os.path.dirname(__file__), "fst_itn_zh")
-        self.model_path = model_path
-        # TODO: 加载FST模型
-        # self.fst = load_fst_model(model_path)
+        self.model_path = os.path.abspath(model_path)
+        self.lang = lang
+        self._normalizer = self._load_normalizer()
+
+    def _load_normalizer(self):
+        if not os.path.isdir(self.model_path):
+            raise FileNotFoundError(f"ITN model directory not found: {self.model_path}")
+
+        tagger_path = os.path.join(self.model_path, "zh_itn_tagger.fst")
+        verbalizer_path = os.path.join(self.model_path, "zh_itn_verbalizer.fst")
+        if not os.path.exists(tagger_path) or not os.path.exists(verbalizer_path):
+            raise FileNotFoundError(
+                "Missing required ITN FST files under model directory: "
+                f"{self.model_path}"
+            )
+
+        try:
+            from itn.chinese.inverse_normalizer import InverseNormalizer
+        except Exception as exc:
+            raise ImportError(
+                "WeTextProcessing is required. Install it with: "
+                "pip install 'git+https://github.com/wenet-e2e/WeTextProcessing.git'"
+            ) from exc
+
+        if self.lang == "zh":
+            return InverseNormalizer(cache_dir=self.model_path)
+        return InverseNormalizer(lang=self.lang, cache_dir=self.model_path)
 
     def process(self, text):
         """
@@ -24,9 +48,8 @@ class ITNProcessor:
         Returns:
             normalized_text: 逆正则化后的文本
         """
-        # TODO: 使用FST模型处理
-        # result = self.fst.process(text)
-        # return result
-
-        # 占位符：直接返回输入
-        return text
+        if not isinstance(text, str):
+            raise TypeError(f"text must be str, got {type(text).__name__}")
+        if text == "":
+            return ""
+        return self._normalizer.normalize(text).strip()
