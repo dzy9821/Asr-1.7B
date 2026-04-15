@@ -46,26 +46,34 @@ def create_asr_client(base_url, api_key="EMPTY"):
     return OpenAI(base_url=base_url, api_key=api_key, http_client=http_client)
 
 
-def parse_hotwords(hotwords):
-    if hotwords is None:
-        return []
+def normalize_asr_context(context):
+    if context is None:
+        return ""
 
-    if isinstance(hotwords, str):
-        parts = re.split(r"[,\n;，；]+", hotwords)
-        return [part.strip() for part in parts if part.strip()]
+    if isinstance(context, str):
+        return context.strip()
 
-    return [str(word).strip() for word in hotwords if str(word).strip()]
+    if isinstance(context, (list, tuple)):
+        lines = [str(item).strip() for item in context if str(item).strip()]
+        return "\n".join(lines).strip()
+
+    return str(context).strip()
 
 
-def build_asr_system_prompt(hotwords=None, system_prompt=None):
+def build_legacy_context(asr_hotwords=None, asr_system_prompt=None):
     lines = []
-    if system_prompt and str(system_prompt).strip():
-        lines.append(str(system_prompt).strip())
+    if asr_system_prompt and str(asr_system_prompt).strip():
+        lines.append(str(asr_system_prompt).strip())
 
-    hotword_list = parse_hotwords(hotwords)
-    if hotword_list:
-        hotword_text = "、".join(hotword_list)
-        lines.append(f"请优先识别并准确输出以下热词：{hotword_text}。")
+    if asr_hotwords:
+        if isinstance(asr_hotwords, str):
+            hotwords = [word.strip() for word in re.split(r"[,\n;，；]+", asr_hotwords) if word.strip()]
+        elif isinstance(asr_hotwords, (list, tuple)):
+            hotwords = [str(word).strip() for word in asr_hotwords if str(word).strip()]
+        else:
+            hotwords = [str(asr_hotwords).strip()]
+        if hotwords:
+            lines.append(f"热词：{'、'.join(hotwords)}")
 
     return "\n".join(lines).strip()
 
@@ -89,20 +97,17 @@ def asr_recognize(
     base_url,
     api_key="EMPTY",
     client=None,
-    hotwords=None,
-    system_prompt=None,
+    context=None,
 ):
     if client is None:
         client = create_asr_client(base_url=base_url, api_key=api_key)
 
     data_url = encode_audio_segment_to_data_url(audio_segment, sr)
-    system_prompt_text = build_asr_system_prompt(
-        hotwords=hotwords,
-        system_prompt=system_prompt,
-    )
+    context_text = normalize_asr_context(context)
     messages = []
-    if system_prompt_text:
-        messages.append({"role": "system", "content": system_prompt_text})
+    if context_text:
+        # Align with official Qwen3-ASR usage: pass context through system role.
+        messages.append({"role": "system", "content": context_text})
     messages.append(
         {
             "role": "user",
@@ -139,12 +144,18 @@ def run_pipeline(
     asr_model="Qwen3-ASR-1.7B",
     asr_base_url="http://148.148.52.127:15002/v1",
     asr_api_key="EMPTY",
+    asr_context=None,
     asr_hotwords=None,
     asr_system_prompt=None,
 ):
     audio, sr = load_audio(audio_path)
     segments = vad_split_audio(audio, sr, vad_model)
     client = create_asr_client(base_url=asr_base_url, api_key=asr_api_key)
+    if asr_context is None:
+        asr_context = build_legacy_context(
+            asr_hotwords=asr_hotwords,
+            asr_system_prompt=asr_system_prompt,
+        )
 
     results = []
     for start, end in segments:
@@ -158,8 +169,7 @@ def run_pipeline(
             base_url=asr_base_url,
             api_key=asr_api_key,
             client=client,
-            hotwords=asr_hotwords,
-            system_prompt=asr_system_prompt,
+            context=asr_context,
         )
         if not asr_result:
             continue
