@@ -1,0 +1,9 @@
+Windows_frame_size: 48
+Threshold: 0.5
+Min_silence_duration_ms: 16
+Speech_pad_ms: 5
+Min_speech_duration_ms: 30
+Max_speech_duration_s: 1.0
+Segment_start_extend_len: 1024
+Segment_end_extend_len: 896
+Version: v4
