@@ -13,9 +13,9 @@ class TenVADWrapper:
 
     def __init__(
         self,
-        hop_size=256,
+        hop_size=640,
         threshold=0.5,
-        sample_rate=16000,
+        sample_rate=16000
         min_silence_duration_ms=0.0,
     ):
         self.hop_size = hop_size
