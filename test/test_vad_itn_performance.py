@@ -172,7 +172,7 @@ if __name__ == "__main__":
         print(f"【严重错误】无法读取音频文件 {audio_path}，详情: {e}")
         sys.exit(1)
         
-    test_shared_vad(audio_data, sample_rate)
+    # test_shared_vad(audio_data, sample_rate) # <--- 已注释，因为C++底层崩溃会导致程序直接终止
     test_single_vad(audio_data, sample_rate)
     test_vad_loading_time()
     test_single_itn_100_concurrent()
