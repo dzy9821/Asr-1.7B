@@ -259,7 +259,7 @@ async def _process_segment(
         logger.info(
             "Segment processed: seg_id=%d, text=%s, latency=%.0fms",
             seg_id,
-            final_text[:50],
+            final_text,
             elapsed_ms,
         )
 
