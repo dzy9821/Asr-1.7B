@@ -137,9 +137,12 @@ async def _handle_handshake(websocket: WebSocket) -> ASRSession | None:
         app_id=msg.header.appId or "",
     )
 
-    # 提取热词
+    # 追加客户端热词（与环境变量默认热词合并）
     if msg.payload and msg.payload.text and msg.payload.text.text:
-        session.hotword_context = build_hotword_context(msg.payload.text.text)
+        client_ctx = build_hotword_context(msg.payload.text.text)
+        if client_ctx:
+            base = build_hotword_context(settings.HOTWORDS)
+            session.hotword_context = f"{base}\n{client_ctx}" if base else client_ctx
 
     return session
 
@@ -153,9 +156,12 @@ async def _handle_audio_frame(
     if not msg.payload or not msg.payload.audio:
         return
 
-    # 更新热词（客户端可在任意帧更新）
+    # 追加客户端热词（与环境变量默认热词合并）
     if msg.payload.text and msg.payload.text.text:
-        session.hotword_context = build_hotword_context(msg.payload.text.text)
+        client_ctx = build_hotword_context(msg.payload.text.text)
+        if client_ctx:
+            base = build_hotword_context(settings.HOTWORDS)
+            session.hotword_context = f"{base}\n{client_ctx}" if base else client_ctx
 
     # Base64 解码
     pcm_int16 = decode_base64_pcm(msg.payload.audio.audio)

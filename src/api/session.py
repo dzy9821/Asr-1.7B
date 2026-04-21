@@ -8,6 +8,8 @@ import enum
 import random
 import string
 
+from src.core.config import settings
+from src.services.asr_service import build_hotword_context
 from src.services.vad_service import StreamingVADSession
 
 
@@ -41,8 +43,8 @@ class ASRSession:
         # 段序号（每次断句 +1）
         self.seg_id: int = 0
 
-        # 热词上下文（握手帧中提取）
-        self.hotword_context: str = ""
+        # 热词上下文（默认从环境变量 HOTWORDS 读取，客户端可追加）
+        self.hotword_context: str = build_hotword_context(settings.HOTWORDS)
 
         # 流式 VAD 实例
         self.vad_session: StreamingVADSession = StreamingVADSession()

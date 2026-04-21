@@ -185,7 +185,7 @@
 
 ### 5.1 关键环境变量
 
-> 所有配置字段均基于 `pydantic-settings` 从环境变量读取，未设置时使用下表默认值。在 `docker-compose.yaml` 的 `environment` 段中可直接覆盖任意配置项。
+> 所有配置均在代码内提供默认值，通过 `os.getenv()` 读取同名环境变量覆盖。无需任何配置文件，未来在 `docker-compose.yaml` 的 `environment` 段中直接注入即可。
 
 | 变量名 | 默认值 | 说明 |
 | :--- | :--- | :--- |
@@ -198,6 +198,7 @@
 | `VLLM_MODEL_NAME` | Qwen3-ASR-1.7B | vLLM 中加载的 ASR 模型名称。 |
 | `VLLM_API_KEY` | EMPTY | vLLM API 密钥（默认无鉴权）。 |
 | `ASCEND_RT_VISIBLE_DEVICES` | 0 | 本服务可见的 Ascend NPU 设备 ID（由 vLLM-Ascend 使用）。 |
+| `HOTWORDS` | （空） | 服务端默认热词列表，逗号分隔（如 `张三丰,武当山,太极拳`）。客户端传入的热词会追加合并。 |
 | `LOG_LEVEL` | INFO | 日志输出级别（DEBUG 用于排查）。 |
 
 ### 5.2 模型权重管理

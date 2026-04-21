@@ -26,6 +26,9 @@ class Settings:
     # ---- NPU ----
     ASCEND_RT_VISIBLE_DEVICES: str = os.getenv("ASCEND_RT_VISIBLE_DEVICES", "0")
 
+    # ---- 热词 ----
+    HOTWORDS: str = os.getenv("HOTWORDS", "")  # 逗号分隔，如 "张三丰,武当山,太极拳"
+
     # ---- 日志 ----
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
