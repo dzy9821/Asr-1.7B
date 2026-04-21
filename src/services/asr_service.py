@@ -26,7 +26,8 @@ class ASRService:
 
     async def startup(self) -> None:
         """初始化 HTTP 客户端（应用启动时调用）。"""
-        self._client = httpx.AsyncClient(timeout=60.0)
+        # 显式禁用代理，等同于 unset http_proxy/https_proxy
+        self._client = httpx.AsyncClient(timeout=60.0, proxy=None)
         logger.info(
             "ASR service started, vLLM endpoint: %s, model: %s",
             settings.VLLM_API_BASE,
