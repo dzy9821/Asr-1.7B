@@ -10,7 +10,7 @@
 ## 目录结构与文件职责详细说明
 
 ### 1. 根目录文件
-*   **`main.py`**: 整个 FastAPI 服务的启动入口。负责注册各个 HTTP/WebSocket 路由（API 端点），并管理全局生命周期（在启动和关闭时初始化/销毁 ASR 服务与 ITN 线程池）。启动命令：`uvicorn main:app --host 0.0.0.0 --port 8000`。
+*   **`main.py`**: 整个 FastAPI 服务的启动入口。负责注册各个 HTTP/WebSocket 路由（API 端点），并管理全局生命周期（在启动和关闭时初始化/销毁 ASR 服务与 ITN 线程池）。启动命令：`python -m uvicorn main:app --host 0.0.0.0 --port 8000`。
 *   **`pyproject.toml`**: 项目的依赖与元数据配置文件，使用 `uv` 或标准的 Python 打包工具链管理。
 *   **`docker-compose.yaml`**: 服务的容器编排配置。推荐通过该文件的 `environment` 字段统一注入所需的各种运行环境变量。
 *   **`asr.md`**: 项目的系统级架构设计文档，包含了接口协议规范、动态断句规则、环境配置等详尽的设计说明。

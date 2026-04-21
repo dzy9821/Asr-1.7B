@@ -212,18 +212,11 @@
 ### 5.3 常用运维命令
 
 ```bash
-# 环境初始化
-cp .env.example .env
-uv sync
+# 依赖安装
+pip install -r requirements.txt
 
-# 服务启动（开发模式）
-uv run uvicorn src.api:app --host 0.0.0.0 --port 8000 --reload
-
-# 代码质量检查
-uv run ruff check --fix . && uv run mypy src/
-
-# 执行测试套件
-uv run pytest --cov=src --cov-report=html
+# 服务启动
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
 
 # Docker 部署
 docker-compose -f docker-compose.yaml up -d
@@ -286,7 +279,7 @@ docker-compose -f docker-compose.yaml up -d
 
 ```bash
 export LOG_LEVEL=DEBUG
-uvicorn main:app --host 0.0.0.0 --port 8000
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 ---
