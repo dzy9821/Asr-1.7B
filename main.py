@@ -2,7 +2,7 @@
 ASR 实时流式转录服务入口。
 
 启动方式：
-    uv run uvicorn main:app --host 0.0.0.0 --port 8000
+    python -m uvicorn main:app --host 0.0.0.0 --port 8000
 """
 
 from contextlib import asynccontextmanager
