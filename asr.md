@@ -285,5 +285,40 @@ docker-compose -f docker-compose.yaml up -d
 
 ```bash
 export LOG_LEVEL=DEBUG
-uv run python main.py
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
+
+---
+
+## 8. 项目进度追踪
+
+> 最后更新时间：2026-04-21
+
+### 已完成
+
+- [x] 系统架构设计文档（本文档）
+- [x] 项目骨架搭建（`src/core/`、`src/api/`、`src/services/`、`src/utils/`、`src/models/`）
+- [x] 全局配置管理（`config.py`，环境变量驱动，代码内默认值，无配置文件依赖）
+- [x] JSON 结构化日志 + trace_id 上下文注入（`logging.py`）
+- [x] 请求/响应 Pydantic 数据模型（`schemas.py`，对齐 §3 接口协议）
+- [x] 流式 VAD 断句服务（`vad_service.py`，动态停顿阈值 + 强制触发）
+- [x] 异步 ASR 推理服务（`asr_service.py`，httpx → vLLM OpenAI 兼容接口）
+- [x] ITN 逆正则化服务（`itn_service.py`，线程池异步包装）
+- [x] WebSocket 全链路处理（`websocket.py`，握手→音频→断句→推理→推送）
+- [x] 并发连接管理（`connection_manager.py`，Semaphore + 1013 拒绝）
+- [x] 会话状态机（`session.py`，sid 生成、seg_id 递增、VAD 实例绑定）
+- [x] 健康探针与 Prometheus 指标暴露（`health.py`、`metrics.py`）
+- [x] 虚拟环境与依赖安装（含 WeTextProcessing），本地启动验证通过
+
+### 待完成
+
+- [ ] **[P0]** 端到端联调：连接远程 vLLM ASR，跑通完整管线
+- [ ] **[P0]** VAD 流式断句验证：用真实音频验证断句准确性与时间戳
+- [ ] **[P1]** WebSocket 测试客户端脚本：模拟客户端发送音频
+- [ ] **[P1]** docker-compose.yaml：vLLM-Ascend 容器编排 + 环境变量注入
+- [ ] **[P1]** Dockerfile：镜像打包（代码+依赖），权重 Volume 挂载
+- [ ] **[P2]** 异常恢复与重试策略
+- [ ] **[P2]** 多并发压力测试
+- [ ] **[P2]** 单元测试覆盖
+- [ ] **[P3]** Grafana 监控面板
+

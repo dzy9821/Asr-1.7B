@@ -1,38 +1,33 @@
 """
-统一配置管理 —— 所有字段均可通过同名环境变量覆盖。
+统一配置管理 —— 所有字段均可通过同名环境变量覆盖，代码内提供默认值。
 """
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+import os
 
 
-class Settings(BaseSettings):
-    """服务全局配置，基于 pydantic-settings 从环境变量读取。"""
+class Settings:
+    """服务全局配置。未来通过 docker-compose environment 段注入。"""
 
     # ---- 服务参数 ----
-    WS_HOST: str = "0.0.0.0"
-    WS_PORT: int = 8000
-    MAX_CONNECTIONS: int = 50
-    HANDSHAKE_TIMEOUT: int = 5  # 握手超时（秒）
+    WS_HOST: str = os.getenv("WS_HOST", "0.0.0.0")
+    WS_PORT: int = int(os.getenv("WS_PORT", "8000"))
+    MAX_CONNECTIONS: int = int(os.getenv("MAX_CONNECTIONS", "50"))
+    HANDSHAKE_TIMEOUT: int = int(os.getenv("HANDSHAKE_TIMEOUT", "5"))
 
-    # ---- 进程池 ----
-    VAD_WORKERS: int = 16
-    ITN_WORKERS: int = 16
+    # ---- 线程池 ----
+    VAD_WORKERS: int = int(os.getenv("VAD_WORKERS", "16"))
+    ITN_WORKERS: int = int(os.getenv("ITN_WORKERS", "16"))
 
     # ---- vLLM ----
-    VLLM_API_BASE: str = "http://148.148.52.127:15002/v1"
-    VLLM_MODEL_NAME: str = "Qwen3-ASR-1.7B"
-    VLLM_API_KEY: str = "EMPTY"
+    VLLM_API_BASE: str = os.getenv("VLLM_API_BASE", "http://148.148.52.127:15002/v1")
+    VLLM_MODEL_NAME: str = os.getenv("VLLM_MODEL_NAME", "Qwen3-ASR-1.7B")
+    VLLM_API_KEY: str = os.getenv("VLLM_API_KEY", "EMPTY")
 
     # ---- NPU ----
-    ASCEND_RT_VISIBLE_DEVICES: str = "0"
+    ASCEND_RT_VISIBLE_DEVICES: str = os.getenv("ASCEND_RT_VISIBLE_DEVICES", "0")
 
     # ---- 日志 ----
-    LOG_LEVEL: str = "INFO"
-
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-    )
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
 
 # 全局单例
