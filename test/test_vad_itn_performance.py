@@ -83,11 +83,17 @@ def test_vad_loading_time():
 async def simulate_itn_requests(itn_service, requests_count, text):
     start = time.perf_counter()
     
-    tasks = [itn_service.normalize(text) for _ in range(requests_count)]
-    await asyncio.gather(*tasks)
+    async def single_request():
+        req_start = time.perf_counter()
+        await itn_service.normalize(text)
+        req_end = time.perf_counter()
+        return req_end - req_start
+        
+    tasks = [single_request() for _ in range(requests_count)]
+    times = await asyncio.gather(*tasks)
     
     total_time = time.perf_counter() - start
-    avg_time = (total_time / requests_count) * 1000  # 毫秒
+    avg_time = (sum(times) / requests_count) * 1000  # 毫秒
     return total_time, avg_time
 
 # 4、输出100个并发时，使用单个itn实例，计算处理平均时长，注意：等待时间也算处理时间
@@ -121,14 +127,18 @@ def _multiprocess_itn_task(text, count):
     itn_service.startup()
     
     async def run_batch():
-        start = time.perf_counter()
-        tasks = [itn_service.normalize(text) for _ in range(count)]
-        await asyncio.gather(*tasks)
-        return time.perf_counter() - start
+        async def single_request():
+            req_start = time.perf_counter()
+            await itn_service.normalize(text)
+            req_end = time.perf_counter()
+            return req_end - req_start
+            
+        tasks = [single_request() for _ in range(count)]
+        return await asyncio.gather(*tasks)
         
-    total_time = asyncio.run(run_batch())
+    times = asyncio.run(run_batch())
     itn_service.shutdown()
-    return total_time
+    return times
 
 # 5、计算使用多进程创建4个itn实例，处理100个并发，每个并发的平均处理时间
 def test_multiprocess_itn():
@@ -150,12 +160,14 @@ def test_multiprocess_itn():
             for _ in range(num_processes)
         ]
         
-        # 等待所有进程结束并获取各进程自身的执行时长（可选作为参考）
-        process_times = [res.get() for res in results]
+        # 等待所有进程结束并获取各进程的每个请求执行时长
+        all_times = []
+        for res in results:
+            all_times.extend(res.get())
         
     # 计算整体从发起进程池到全部完成的总时间
     total_time = time.perf_counter() - start
-    avg_time = (total_time / total_requests) * 1000  # 毫秒
+    avg_time = (sum(all_times) / total_requests) * 1000  # 毫秒
     
     print(f"开启进程数: {num_processes}，每进程处理数: {requests_per_process}")
     print(f"多进程总处理时间: {total_time:.4f} 秒")
