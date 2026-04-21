@@ -5,9 +5,8 @@ ASR 会话状态管理 —— 每个 WebSocket 连接对应一个 ASRSession。
 from __future__ import annotations
 
 import enum
-import string
 import random
-from typing import Optional
+import string
 
 from src.services.vad_service import StreamingVADSession
 
@@ -59,3 +58,4 @@ class ASRSession:
 
     def set_closing(self) -> None:
         self.state = SessionState.CLOSING
+
