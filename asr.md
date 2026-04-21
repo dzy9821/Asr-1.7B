@@ -185,7 +185,7 @@
 
 ### 5.1 关键环境变量
 
-> 所有配置字段均基于 `pydantic-settings` 从环境变量读取，未设置时使用下表默认值。在 `docker-compose.yml` 的 `environment` 段中可直接覆盖任意配置项。
+> 所有配置字段均基于 `pydantic-settings` 从环境变量读取，未设置时使用下表默认值。在 `docker-compose.yaml` 的 `environment` 段中可直接覆盖任意配置项。
 
 | 变量名 | 默认值 | 说明 |
 | :--- | :--- | :--- |
@@ -197,7 +197,7 @@
 | `VLLM_API_BASE` | http://148.148.52.127:15002/v1 | vLLM 服务的 OpenAI 兼容 API 地址。 |
 | `VLLM_MODEL_NAME` | Qwen3-ASR-1.7B | vLLM 中加载的 ASR 模型名称。 |
 | `VLLM_API_KEY` | EMPTY | vLLM API 密钥（默认无鉴权）。 |
-| `CUDA_VISIBLE_DEVICES` | 0 | 本服务可见的 GPU 设备 ID（注：GPU 资源主要由 vLLM 容器使用）。 |
+| `ASCEND_RT_VISIBLE_DEVICES` | 0 | 本服务可见的 Ascend NPU 设备 ID（由 vLLM-Ascend 使用）。 |
 | `LOG_LEVEL` | INFO | 日志输出级别（DEBUG 用于排查）。 |
 
 ### 5.2 模型权重管理
@@ -205,8 +205,8 @@
 - **存储位置**：`./weights/`
 - **包含内容**：
   - `fst_itn_zh/`：中文 ITN 模型文件。
-  - `Qwen3-ASR-1.7B/`：ASR 模型权重及配置文件（由 vLLM 容器加载）。
-- **容器化部署**：通过 Docker Volume 挂载至 `/weights` 目录。
+  - `Qwen3-ASR-1.7B/`：ASR 模型权重及配置文件（由 vLLM-Ascend 加载）。
+- **容器化部署**：ASR 模型权重体积较大，**必须通过 Docker Volume 挂载**至容器内 `/weights` 目录，不打入镜像。
 
 ### 5.3 常用运维命令
 
@@ -237,11 +237,11 @@ docker-compose -f docker-compose.yaml up -d
    ```bash
    pip install 'git+https://github.com/wenet-e2e/WeTextProcessing.git'
    ```
-3. **复制项目代码**：将完整项目（含 `models/`、`src/`、`weights/` 等）COPY 进镜像。
+3. **复制项目代码**：将完整项目（含 `models/`、`src/` 等）COPY 进镜像。**注意**：`weights/` 目录不 COPY 进镜像，通过 Volume 挂载。
 4. **安装项目依赖**：`pip install -r requirements.txt`（或 `uv sync`）。
-5. **设置启动命令**：镜像 CMD/ENTRYPOINT 负责同时启动 vLLM 服务（后台）与本推理服务（前台）。
+5. **设置启动命令**：用户手动执行 vLLM 服务与本推理服务的启动命令。
 
-> **注意**：模型权重（`weights/Qwen3-ASR-1.7B/` 等）体积较大，视需求决定是打进镜像还是以 Volume 形式挂载。推荐挂载方式以控制镜像体积。
+> **注意**：ASR 模型权重（`weights/Qwen3-ASR-1.7B/`）**必须以 Volume 形式挂载**，不打入镜像，以控制镜像体积并方便模型版本更新。
 
 ---
 
