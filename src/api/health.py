@@ -18,16 +18,10 @@ async def health() -> dict:
 @router.get("/ready")
 async def ready() -> dict:
     """模型加载就绪状态检查（K8s Readiness Probe）。"""
-    # 延迟导入避免循环依赖
-    from src.services.asr_service import ASRService
+    # 复用全局 asr_service 实例（由 main.py lifespan 初始化）
+    from src.api.websocket import asr_service
 
-    asr = ASRService()
-    await asr.startup()
-    try:
-        available = await asr.is_available()
-    finally:
-        await asr.shutdown()
-
+    available = await asr_service.is_available()
     if available:
         return {"status": "ready"}
     return {"status": "not_ready", "detail": "vLLM service unreachable"}

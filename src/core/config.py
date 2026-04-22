@@ -11,12 +11,15 @@ class Settings:
     # ---- 服务参数 ----
     WS_HOST: str = os.getenv("WS_HOST", "0.0.0.0")
     WS_PORT: int = int(os.getenv("WS_PORT", "8000"))
-    MAX_CONNECTIONS: int = int(os.getenv("MAX_CONNECTIONS", "50"))
+    MAX_CONNECTIONS: int = int(os.getenv("MAX_CONNECTIONS", "64"))
     HANDSHAKE_TIMEOUT: int = int(os.getenv("HANDSHAKE_TIMEOUT", "5"))
 
-    # ---- 线程池 ----
-    VAD_WORKERS: int = int(os.getenv("VAD_WORKERS", "16"))
-    ITN_WORKERS: int = int(os.getenv("ITN_WORKERS", "16"))
+    # ---- VAD 多进程池 ----
+    VAD_WORKERS: int = int(os.getenv("VAD_WORKERS", "32"))
+    VAD_CONNECTIONS_PER_INSTANCE: int = int(os.getenv("VAD_CONNECTIONS_PER_INSTANCE", "2"))
+
+    # ---- ITN 多进程池 ----
+    ITN_WORKERS: int = int(os.getenv("ITN_WORKERS", "8"))
 
     # ---- vLLM ----
     VLLM_API_BASE: str = os.getenv("VLLM_API_BASE", "http://148.148.52.127:15002/v1")

@@ -11,7 +11,7 @@ from fastapi import FastAPI
 
 from src.api.health import router as health_router
 from src.api.metrics import router as metrics_router
-from src.api.websocket import asr_service, itn_service, router as ws_router
+from src.api.websocket import asr_service, itn_pool, vad_pool, router as ws_router
 from src.core.config import settings
 from src.core.logging import get_logger, setup_logging
 
@@ -29,8 +29,22 @@ async def lifespan(app: FastAPI):
         settings.WS_PORT,
         settings.MAX_CONNECTIONS,
     )
+
+    # VAD 多进程池（eager init）
+    vad_pool.start()
+    logger.info(
+        "VAD pool ready: %d workers, capacity=%d",
+        vad_pool.num_workers,
+        vad_pool.max_capacity,
+    )
+
+    # ITN 多进程池（eager init）
+    itn_pool.start()
+    logger.info("ITN pool ready: %d workers", itn_pool.num_workers)
+
+    # ASR HTTP 客户端
     await asr_service.startup()
-    itn_service.startup()
+
     logger.info("All services initialized")
 
     yield
@@ -38,7 +52,8 @@ async def lifespan(app: FastAPI):
     # ---- 关闭 ----
     logger.info("Shutting down ASR service...")
     await asr_service.shutdown()
-    itn_service.shutdown()
+    itn_pool.shutdown()
+    vad_pool.shutdown()
     logger.info("Shutdown complete")
 
 

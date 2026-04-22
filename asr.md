@@ -23,25 +23,26 @@
 - **API 层** (`src/api/`)：基于 FastAPI 的 WebSocket 网关，负责连接管理与协议握手。
 - **服务层** (`src/services/`)：编排 VAD、ASR、ITN 核心业务逻辑。
 - **模型层** (`src/models/`)：基于 Pydantic 定义的数据传输对象（DTO）与配置模型。
-- **配置层**：基于 `pydantic-settings` 的环境变量集中管理。
+- **配置层**：基于环境变量的集中管理，代码内提供默认值。
 
 **并发与隔离策略**：
 
 - **异步 I/O**：WebSocket 连接处理使用 `asyncio` 支持高并发长连接。
-- **进程池模式**：VAD 与 ITN 为 CPU 密集型任务，采用独立多进程池处理，避免阻塞事件循环。
+- **VAD 多进程池**：VAD 采用固定 **32 个实例** 的多进程池（`spawn` 模式），按会话 `session_id` hash 做亲和路由；**每 2 个连接共享 1 个 VAD 实例**，整体承载 **64 并发连接**。同一 VAD 实例内部通过任务队列串行处理 `feed/flush`，避免并发改写底层 C 运行时状态。结果通过 `Manager().Queue()` 跨进程安全回传。服务启动时 **eager init** 所有进程。
+- **ITN 多进程池**：ITN 采用固定 **8 个多进程实例**（`spawn` 模式），请求通过 Pool 内部队列自动负载均衡分发。每个进程预加载 `ITNProcessor` 单例，避免 GIL 限制下的 CPU 密集型 FST 计算瓶颈。结果通过 `Manager().Queue()` 跨进程安全回传。服务启动时 **eager init** 所有进程并预热模型。
 - **vLLM 服务化**：ASR 推理由独立容器内的 vLLM 服务承载，本服务通过 OpenAI 兼容 RESTful API 与其通信，vLLM 进程常驻，无需每次请求重启。
 
 ### 2.2 数据流详解
 
-1. **连接建立**：客户端连接至 `ws://host:port/tuling/asr/v3`，需在 **5 秒内**完成握手验证（携带 `traceId`、`appId`、`bizId`）。
+1. **连接建立**：客户端连接至 `ws://host:port/tuling/asr/v3`，需在 **5 秒内**完成握手验证（携带 `traceId`、`appId`、`bizId`）。系统最大并发连接数为 **64**。
 2. **音频接收**：客户端持续发送 Base64 编码的 PCM 音频帧。
-3. **语音活动检测**：VAD 服务实时分析音频流，检测话语结束（Endpoint）时触发回调。VAD 的 `hop_size` 固定为 **640 帧（40ms @ 16kHz）**，与客户端每 40ms 发送一帧音频的节律完全对齐，实现逐帧实时检测。
+3. **语音活动检测**：VAD 服务实时分析音频流，检测话语结束（Endpoint）时触发回调。VAD 的 `hop_size` 固定为 **640 帧（40ms @ 16kHz）**，与客户端每 40ms 发送一帧音频的节律完全对齐，实现逐帧实时检测。连接会基于 `session_id` 固定路由到 32 个 VAD 实例之一；每个 VAD 实例最多服务 2 个连接，且实例内请求队列串行执行。
    - **动态转写触发规则**：停顿等待时间随已收集语音长度线性缩短，具体逻辑如下：
      - **短音频抑制**：语音时长 `< 0.5s`，视为噪声或误触，不触发（继续等待）。
      - **长音频强制触发**：语音时长 `> 15.0s`，无论停顿多久立即触发，防止缓冲区堆积。
      - **动态停顿阈值**：对于 `0.5s` 到 `15.0s` 之间的语音，触发转写所需的停顿时间阈值从上限 `2.0s (T_MAX)` 线性递减至下限 `0.3s (T_MIN)`。即：语音越长，触发断句需要的停顿越短（递减斜率约为 `0.17`）。
 4. **语音识别**：截取的完整语音片段通过 HTTP 请求发送至 vLLM 服务（OpenAI 兼容接口），由 Qwen3-ASR-1.7B 模型完成转写。热词通过拼接提示词（Prompt）的方式注入，以提升特定词汇识别准确率。
-5. **文本后处理**：ASR 原始输出经 ITN 模型处理，转换为标准化文本（如数字、符号规范化）。
+5. **文本后处理**：ASR 原始输出经 ITN 模型处理，转换为标准化文本（如数字、符号规范化）。ITN 请求通过 8 实例多进程池自动负载均衡分流。
 6. **结果推送**：服务端将带时间戳的词语级/句子级结果以 JSON 格式通过 WebSocket 推送给客户端。
 
 ### 2.3 场景示例：三段式连续语音处理流
@@ -49,18 +50,18 @@
 假设客户端持续录音并推送，用户完整表达了三句话，整个流式处理的时序如下：
 
 1. **握手与推流开始**：客户端发送 `status: 0` 帧建立连接。随后开始以 40ms 间隔持续推送音频流帧（`status: 1`）。
-2. **第一段（“你好”） —— 正常停顿触发**：
-   - **输入**：用户说了 1s 的“你好”，然后思考停顿了 2.0s。
+2. **第一段（"你好"） —— 正常停顿触发**：
+   - **输入**：用户说了 1s 的"你好"，然后思考停顿了 2.0s。
    - **VAD 判定**：当前收集语音长 1s，根据公式计算动态停顿阈值约为 `2.0 - 0.17*1 = 1.83s`。实际停顿 2.0s `>` 1.83s，**成功触发第一次断句**。
-   - **ASR 与推送**：服务端截取这 1s 的音频封装成 HTTP 请求发给 vLLM；拿到 ASR 结果并经过 ITN 后，通过 WebSocket 将“你好”推送给客户端（附带 `segId: 0` 和识别中状态 `status: 1`）。此时 VAD 缓冲区清空并重新开始收集。
-3. **第二段（“帮我查一下今天的天气”） —— 动态缩短阈值触发**：
+   - **ASR 与推送**：服务端截取这 1s 的音频封装成 HTTP 请求发给 vLLM；拿到 ASR 结果并经过 ITN 后，通过 WebSocket 将"你好"推送给客户端（附带 `segId: 0` 和识别中状态 `status: 1`）。此时 VAD 缓冲区清空并重新开始收集。
+3. **第二段（"帮我查一下今天的天气"） —— 动态缩短阈值触发**：
    - **输入**：用户说了 6s（语速较慢），然后轻微停顿了 1.0s。
    - **VAD 判定**：当前语音长 6s，动态停顿阈值随之降低，约为 `2.0 - 0.17*6 = 0.98s`。实际停顿 1.0s `>` 0.98s，**成功触发第二次断句**。
-   - **ASR 与推送**：截取这 6s 音频请求 vLLM，随后推送结果“帮我查一下今天的天气”（附带 `segId: 1` 和识别中状态 `status: 1`）。VAD 缓冲区再次清空。
-4. **第三段（“特别是下午会不会下雨”） —— 客户端主动结束触发**：
+   - **ASR 与推送**：截取这 6s 音频请求 vLLM，随后推送结果"帮我查一下今天的天气"（附带 `segId: 1` 和识别中状态 `status: 1`）。VAD 缓冲区再次清空。
+4. **第三段（"特别是下午会不会下雨"） —— 客户端主动结束触发**：
    - **输入**：用户最后说了 3s 的内容。说完后，用户立刻松开语音按钮或关闭麦克风，客户端发送结束帧（`status: 2`）。
    - **VAD 判定**：服务端收到 `status: 2`，无视当前是否达到停顿阈值，**强制截断并触发最后一段的转写**。
-   - **ASR 与推送**：截取最后 3s 音频请求 vLLM。处理完成后，向客户端推送最终结果“特别是下午会不会下雨”（附带 `segId: 2` 和整体结束状态 `status: 2`）。结果发送完毕后，服务端正常断开 WebSocket 连接，本次会话结束。
+   - **ASR 与推送**：截取最后 3s 音频请求 vLLM。处理完成后，向客户端推送最终结果"特别是下午会不会下雨"（附带 `segId: 2` 和整体结束状态 `status: 2`）。结果发送完毕后，服务端正常断开 WebSocket 连接，本次会话结束。
 
 ---
 
@@ -190,9 +191,10 @@
 | 变量名 | 默认值 | 说明 |
 | :--- | :--- | :--- |
 | `WS_HOST` / `WS_PORT` | 0.0.0.0 / 8000 | 服务监听地址与端口。 |
-| `VAD_WORKERS` | 16 | VAD CPU 密集型进程池大小，建议按宿主机 CPU 核数调整。 |
-| `ITN_WORKERS` | 16 | ITN CPU 密集型进程池大小，建议按宿主机 CPU 核数调整。 |
-| `MAX_CONNECTIONS` | 50 | 最大并发 WebSocket 连接数限制；超限时**直接拒绝**新连接（WebSocket close code `1013 Try Again Later`）。 |
+| `VAD_WORKERS` | 32 | VAD 多进程池中的实例数（固定容量设计，`spawn` 模式）。 |
+| `VAD_CONNECTIONS_PER_INSTANCE` | 2 | 每个 VAD 实例承载的连接数上限；同一实例内请求串行处理。 |
+| `ITN_WORKERS` | 8 | ITN 多进程池实例数（固定容量设计，`spawn` 模式）。每个进程预加载 `ITNProcessor` 单例。 |
+| `MAX_CONNECTIONS` | 64 | 最大并发 WebSocket 连接数限制；按 `VAD_WORKERS * VAD_CONNECTIONS_PER_INSTANCE` 计算，超限时**直接拒绝**新连接（WebSocket close code `1013 Try Again Later`）。未来可调整实例数，但会维持最大并发为 VAD 实例数的整倍数。 |
 | `HANDSHAKE_TIMEOUT` | 5 | 握手超时时间（秒），连接建立后须在此时间内完成首帧验证。 |
 | `VLLM_API_BASE` | http://148.148.52.127:15002/v1 | vLLM 服务的 OpenAI 兼容 API 地址。 |
 | `VLLM_MODEL_NAME` | Qwen3-ASR-1.7B | vLLM 中加载的 ASR 模型名称。 |
@@ -246,7 +248,7 @@ docker-compose -f docker-compose.yaml up -d
 | 端点 | 方法 | 描述 |
 | :--- | :--- | :--- |
 | `/api/v1/health` | GET | 服务进程存活检查。 |
-| `/api/v1/ready` | GET | 模型加载就绪状态检查（用于 K8s Readiness Probe）。 |
+| `/api/v1/ready` | GET | 模型加载就绪状态检查（用于 K8s Readiness Probe）。复用全局 `asr_service` 实例。 |
 | `/api/v1/connections` | GET | 当前活跃连接数统计。 |
 | `/metrics` | GET | Prometheus 格式指标暴露。 |
 
@@ -274,6 +276,7 @@ docker-compose -f docker-compose.yaml up -d
 | **音频识别无结果** | 确认发送音频为 **PCM 16k/16bit** 格式，且 Base64 编码正确；检查 vLLM 服务是否可达（`curl $VLLM_API_BASE/models`）。 |
 | **NPU 显存溢出（OOM）** | vLLM-Ascend 启动参数中调整 `--gpu-memory-utilization`；或降低 `MAX_CONNECTIONS` 以减少并发推理请求数。 |
 | **识别延迟高** | 查看 `asr_queue_depth` 是否持续升高；检查 vLLM 侧延迟；考虑扩容 vLLM 实例或降低并发连接数。 |
+| **VAD/ITN 进程池启动慢** | 使用 `spawn` 模式的多进程池启动较慢属正常现象（需序列化并重新加载模型）。启动期间服务不可用，Readiness Probe 会返回 `not_ready`。 |
 
 ### 7.1 调试模式开启
 
@@ -286,7 +289,7 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000
 
 ## 8. 项目进度追踪
 
-> 最后更新时间：2026-04-21
+> 最后更新时间：2026-04-22
 
 ### 已完成
 
@@ -296,11 +299,12 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000
 - [x] JSON 结构化日志 + trace_id 上下文注入（`logging.py`）
 - [x] 请求/响应 Pydantic 数据模型（`schemas.py`，对齐 §3 接口协议）
 - [x] 流式 VAD 断句服务（`vad_service.py`，动态停顿阈值 + 强制触发）
+- [x] VAD 多进程池（`vad_pool.py`，32 实例 spawn 模式 + session hash 路由 + Queue 结果回传 + eager init）
 - [x] 异步 ASR 推理服务（`asr_service.py`，httpx → vLLM OpenAI 兼容接口）
-- [x] ITN 逆正则化服务（`itn_service.py`，线程池异步包装）
+- [x] ITN 多进程池（`itn_pool.py`，8 实例 spawn 模式 + Pool 内部负载均衡 + Queue 结果回传 + eager init 预热）
 - [x] WebSocket 全链路处理（`websocket.py`，握手→音频→断句→推理→推送）
 - [x] 并发连接管理（`connection_manager.py`，Semaphore + 1013 拒绝）
-- [x] 会话状态机（`session.py`，sid 生成、seg_id 递增、VAD 实例绑定）
+- [x] 会话状态机（`session.py`，sid 生成、seg_id 递增；VAD 由全局池管理，Session 不直接持有）
 - [x] 健康探针与 Prometheus 指标暴露（`health.py`、`metrics.py`）
 - [x] 虚拟环境与依赖安装（含 WeTextProcessing），本地启动验证通过
 
@@ -315,4 +319,3 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000
 - [ ] **[P2]** 多并发压力测试
 - [ ] **[P2]** 单元测试覆盖
 - [ ] **[P3]** Grafana 监控面板
-

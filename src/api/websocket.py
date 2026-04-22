@@ -35,7 +35,8 @@ from src.models.schemas import (
     WSItem,
 )
 from src.services.asr_service import ASRService, build_hotword_context
-from src.services.itn_service import ITNService
+from src.services.itn_pool import ITNPool
+from src.services.vad_pool import VADPool
 from src.utils.audio import decode_base64_pcm, samples_to_cs, samples_to_ms
 
 logger = get_logger(__name__)
@@ -44,7 +45,8 @@ router = APIRouter()
 
 # 服务实例（由 main.py 生命周期管理器初始化）
 asr_service: ASRService = ASRService()
-itn_service: ITNService = ITNService()
+vad_pool: VADPool = VADPool()
+itn_pool: ITNPool = ITNPool()
 
 
 @router.websocket("/tuling/asr/v3")
@@ -101,7 +103,12 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         except Exception:
             pass
     finally:
+        # 释放 VAD 子进程端的会话资源
         if session:
+            try:
+                await vad_pool.close_session(session.sid)
+            except Exception:
+                pass
             connection_manager.unregister(session.sid)
             asr_connections_current.dec()
         try:
@@ -166,8 +173,8 @@ async def _handle_audio_frame(
     # Base64 解码
     pcm_int16 = decode_base64_pcm(msg.payload.audio.audio)
 
-    # 喂入 VAD
-    segments = session.vad_session.feed_audio(pcm_int16)
+    # 喂入 VAD（通过多进程池）
+    segments = await vad_pool.feed_audio(session.sid, pcm_int16)
 
     # 对每个触发的语音段执行 ASR + ITN
     for seg in segments:
@@ -178,8 +185,8 @@ async def _handle_end_frame(websocket: WebSocket, session: ASRSession) -> None:
     """处理结束帧：刷空 VAD 缓冲区并推送终态结果。"""
     session.set_closing()
 
-    # 强制刷出残余音频
-    seg = session.vad_session.flush()
+    # 强制刷出残余音频（通过多进程池）
+    seg = await vad_pool.flush(session.sid)
     if seg is not None:
         await _process_segment(websocket, session, seg, is_final=True)
     else:
@@ -209,8 +216,8 @@ async def _process_segment(
             context=session.hotword_context,
         )
 
-        # ITN 后处理
-        final_text = await itn_service.normalize(raw_text)
+        # ITN 后处理（通过多进程池）
+        final_text = await itn_pool.normalize(raw_text)
 
         # 构建结果并推送
         bg_ms = samples_to_ms(start_sample)
