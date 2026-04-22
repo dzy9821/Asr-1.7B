@@ -1,5 +1,5 @@
 """
-ASR 会话状态管理 —— 每个 WebSocket 连接对应一个 ASRSession。
+ASR 会话状态 management —— 每个 WebSocket 连接对应一个 ASRSession。
 """
 
 from __future__ import annotations
