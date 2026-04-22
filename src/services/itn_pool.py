@@ -38,6 +38,14 @@ _ITN_PROCESSOR: Any = None
 _RESULT_QUEUE: Any = None
 
 
+def _safe_qsize(queue_obj: Any) -> Optional[int]:
+    """Best-effort 读取队列长度；不支持时返回 None。"""
+    try:
+        return int(queue_obj.qsize())
+    except Exception:
+        return None
+
+
 def _init_itn_worker(result_queue: Any) -> None:
     """Pool initializer：子进程启动时执行一次，预加载 ITN 模型。"""
     global _ITN_PROCESSOR, _RESULT_QUEUE
@@ -117,6 +125,9 @@ class ITNPool:
         self._ctx = mp.get_context("spawn")
         self._manager: Any = None
         self._runtime: Optional[_ITNWorkerRuntime] = None
+        self._monitor_interval_sec = max(0.0, settings.MP_QUEUE_LOG_INTERVAL_SEC)
+        self._monitor_running = threading.Event()
+        self._monitor_thread: Optional[threading.Thread] = None
 
     def start(self) -> None:
         """
@@ -146,10 +157,20 @@ class ITNPool:
         )
         self._runtime.dispatcher.start()
 
+        if self._monitor_interval_sec > 0:
+            self._monitor_running.clear()
+            self._monitor_thread = threading.Thread(
+                target=self._log_queue_stats_loop,
+                daemon=True,
+                name="itn-queue-monitor",
+            )
+            self._monitor_thread.start()
+
         logger.info("ITN pool started: %d workers", self._num_workers)
 
     def shutdown(self) -> None:
         """终止所有 worker 进程并释放资源。"""
+        self._monitor_running.set()
         if self._runtime:
             self._runtime.running.clear()
             try:
@@ -162,6 +183,7 @@ class ITNPool:
                 self._manager.shutdown()
         except Exception:
             pass
+        self._monitor_thread = None
         self._runtime = None
         logger.info("ITN pool shutdown complete")
 
@@ -181,6 +203,28 @@ class ITNPool:
                 waiter = runtime.pending.pop(task_id, None)
             if waiter is not None:
                 waiter.put(result)
+
+    def _log_queue_stats_loop(self) -> None:
+        """后台线程：定期打印队列与待回包任务长度。"""
+        while not self._monitor_running.wait(timeout=self._monitor_interval_sec):
+            runtime = self._runtime
+            if runtime is None:
+                continue
+
+            with runtime.pending_lock:
+                pending_size = len(runtime.pending)
+
+            result_qsize = _safe_qsize(runtime.result_queue)
+            result_qsize_text = (
+                str(result_qsize) if result_qsize is not None else "unknown"
+            )
+
+            logger.info(
+                "ITN queue stats: pending=%d result_queue=%s workers=%d",
+                pending_size,
+                result_qsize_text,
+                self._num_workers,
+            )
 
     # ---- 同步提交 ----
 

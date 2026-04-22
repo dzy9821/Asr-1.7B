@@ -39,6 +39,14 @@ _SESSIONS: dict[str, object] = {}
 _RESULT_QUEUE: Any = None
 
 
+def _safe_qsize(queue_obj: Any) -> Optional[int]:
+    """Best-effort 读取队列长度；不支持时返回 None。"""
+    try:
+        return int(queue_obj.qsize())
+    except Exception:
+        return None
+
+
 def _init_worker(result_queue: Any) -> None:
     """Pool initializer：子进程启动时执行一次。"""
     global _RESULT_QUEUE, _SESSIONS
@@ -162,6 +170,9 @@ class VADPool:
         self._ctx = mp.get_context("spawn")
         self._manager: Any = None
         self._workers: list[_WorkerRuntime] = []
+        self._monitor_interval_sec = max(0.0, settings.MP_QUEUE_LOG_INTERVAL_SEC)
+        self._monitor_running = threading.Event()
+        self._monitor_thread: Optional[threading.Thread] = None
 
     def start(self) -> None:
         """
@@ -190,6 +201,15 @@ class VADPool:
             runtime.dispatcher.start()
             self._workers.append(runtime)
 
+        if self._monitor_interval_sec > 0:
+            self._monitor_running.clear()
+            self._monitor_thread = threading.Thread(
+                target=self._log_queue_stats_loop,
+                daemon=True,
+                name="vad-queue-monitor",
+            )
+            self._monitor_thread.start()
+
         logger.info(
             "VAD pool started: %d workers, %d conn/instance, max_capacity=%d",
             self._num_workers,
@@ -199,6 +219,7 @@ class VADPool:
 
     def shutdown(self) -> None:
         """终止所有 worker 进程并释放资源。"""
+        self._monitor_running.set()
         for worker in self._workers:
             worker.running.clear()
         for worker in self._workers:
@@ -212,6 +233,7 @@ class VADPool:
                 self._manager.shutdown()
         except Exception:
             pass
+        self._monitor_thread = None
         self._workers.clear()
         logger.info("VAD pool shutdown complete")
 
@@ -231,6 +253,60 @@ class VADPool:
                 waiter = runtime.pending.pop(task_id, None)
             if waiter is not None:
                 waiter.put(result)
+
+    def _log_queue_stats_loop(self) -> None:
+        """后台线程：定期打印队列与待回包任务长度。"""
+        while not self._monitor_running.wait(timeout=self._monitor_interval_sec):
+            if not self._workers:
+                continue
+
+            pending_total = 0
+            result_queue_total = 0
+            result_queue_known = True
+            active_workers = 0
+            max_pending = -1
+            max_pending_worker = -1
+            max_result_queue = -1
+            max_result_queue_worker = -1
+
+            for idx, runtime in enumerate(self._workers):
+                with runtime.pending_lock:
+                    pending_size = len(runtime.pending)
+                pending_total += pending_size
+                if pending_size > 0:
+                    active_workers += 1
+                if pending_size > max_pending:
+                    max_pending = pending_size
+                    max_pending_worker = idx
+
+                result_qsize = _safe_qsize(runtime.result_queue)
+                if result_qsize is None:
+                    result_queue_known = False
+                else:
+                    result_queue_total += result_qsize
+                    if result_qsize > max_result_queue:
+                        max_result_queue = result_qsize
+                        max_result_queue_worker = idx
+
+            result_queue_total_text = (
+                str(result_queue_total) if result_queue_known else "unknown"
+            )
+            max_result_queue_text = (
+                f"{max_result_queue}@worker-{max_result_queue_worker}"
+                if result_queue_known
+                else "unknown"
+            )
+
+            logger.info(
+                "VAD queue stats: pending_total=%d active_workers=%d/%d max_pending=%d@worker-%d result_queue_total=%s max_result_queue=%s",
+                pending_total,
+                active_workers,
+                self._num_workers,
+                max_pending,
+                max_pending_worker,
+                result_queue_total_text,
+                max_result_queue_text,
+            )
 
     # ---- 路由 ----
 

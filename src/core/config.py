@@ -34,6 +34,9 @@ class Settings:
 
     # ---- 日志 ----
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    MP_QUEUE_LOG_INTERVAL_SEC: float = float(
+        os.getenv("MP_QUEUE_LOG_INTERVAL_SEC", "10")
+    )
 
 
 # 全局单例
