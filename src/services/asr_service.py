@@ -87,12 +87,26 @@ class ASRService:
         if settings.VLLM_API_KEY and settings.VLLM_API_KEY != "EMPTY":
             headers["Authorization"] = f"Bearer {settings.VLLM_API_KEY}"
 
-        response = await self._client.post(url, json=payload, headers=headers)
-        response.raise_for_status()
+        # 重试逻辑：vLLM 高并发下可能断连 (ReadError / ConnectError)
+        max_retries = 3
+        last_exc: Exception | None = None
+        for attempt in range(max_retries):
+            try:
+                response = await self._client.post(url, json=payload, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+                content = data["choices"][0]["message"]["content"]
+                return _clean_asr_output(content if isinstance(content, str) else str(content))
+            except (httpx.ReadError, httpx.ConnectError, httpx.RemoteProtocolError) as exc:
+                last_exc = exc
+                wait = 1.0 * (2 ** attempt)  # 1s, 2s, 4s
+                logger.warning(
+                    "ASR vLLM request failed (attempt %d/%d), retrying in %.1fs: %s",
+                    attempt + 1, max_retries, wait, exc,
+                )
+                await asyncio.sleep(wait)
 
-        data = response.json()
-        content = data["choices"][0]["message"]["content"]
-        return _clean_asr_output(content if isinstance(content, str) else str(content))
+        raise last_exc  # type: ignore[misc]
 
     async def is_available(self) -> bool:
         """检查 vLLM 服务是否可达。"""

@@ -14,348 +14,344 @@ ASR WebSocket 并发压力测试报告
 预期分片数(VAD): 6 (feed) + 1 (flush/结束) = 7
 
 --- 总体统计 ---
-成功连接:   4 / 50
-失败连接:   46 / 50
+成功连接:   3 / 50
+失败连接:   47 / 50
 
 --- 错误分类 ---
-  exception: 46 个
+  exception: 47 个
     conn#0: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+    conn#1: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
     conn#2: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-    conn#3: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-    ... 还有 43 个
+    ... 还有 44 个
 
 --- 分片统计 (成功连接) ---
   分片数分布:
-     7 个分片:   4 个连接  ████
+     7 个分片:   3 个连接  ███
 
-  ⚠ 出现 bg=0,ed=0 空分片的连接: 4 个
-    conn#1 seg#6: bg=0 ed=0 status=2
-    conn#5 seg#6: bg=0 ed=0 status=2
-    conn#9 seg#6: bg=0 ed=0 status=2
-    conn#29 seg#6: bg=0 ed=0 status=2
+  ⚠ 出现 bg=0,ed=0 空分片的连接: 3 个
+    conn#36 seg#5: bg=0 ed=0 status=2
+    conn#40 seg#5: bg=0 ed=0 status=2
+    conn#49 seg#5: bg=0 ed=0 status=2
 
 --- 终态 (status=2) ---
-  收到终态:   4 / 4
-  未收到终态: 0 / 4
+  收到终态:   3 / 3
+  未收到终态: 0 / 3
 
 --- 延迟统计 (成功连接) ---
-  握手延迟:  min=22ms  med=33ms  max=33ms
-  端到端:    min=84.8s  med=89.6s  max=89.6s
+  握手延迟:  min=16ms  med=17ms  max=18ms
+  端到端:    min=86.3s  med=89.5s  max=89.6s
 
 --- 连接明细 (前10个成功 + 全部失败) ---
-  [✓] conn#001 sid=AST_X9BSRD3W4ER5Y
+  [✓] conn#036 sid=AST_RAIXLADM5WZ0W
       segments=7 has_final=True chunks_sent=2030
-      handshake=33ms e2e=89.4s
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-      seg#2: bg=31160ms ed=43280ms status=1 text='是北京路，在北京路上 null 上。北京路靠近什么地方？北京路和什么路路口？就是这条横马路。我说不太清楚这个地方，我看一下。'
-      seg#3: bg=43320ms ed=54360ms status=1 text='旁边有个喜来顺酒店，请再说清楚点儿。北京路和一个什么路路口有个呃，右边有个喜来顺酒店，请您报一下路名。'
-      seg#4: bg=54960ms ed=69200ms status=1 text='看一下，呃，就是北京路一直往南，到哦是广东路，北京路和广东路口。北京路和广东路口吗？对，北京路和广东路口。好的，我们马上派人过去。'
-      seg#5: bg=69560ms ed=78200ms status=1 text='快点过来！请问先生，您贵姓？呃，不要管我是谁，就不重要。你们快点过来，再见。'
-      seg#6: bg=0ms ed=0ms status=2 text='' ⚠EMPTY
-  [✓] conn#005 sid=AST_7WGKPLEJZX093
-      segments=7 has_final=True chunks_sent=2030
-      handshake=33ms e2e=89.6s
+      handshake=17ms e2e=89.5s
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
       seg#2: bg=31160ms ed=43280ms status=1 text='是北京路，在北京路上。北京路靠近什么地方？北京路和什么路路口？就是这条横马路，我说不太清楚这个地方，我看一下。'
       seg#3: bg=43320ms ed=54360ms status=1 text='旁边有个喜来顺酒店，请再说清楚点儿。北京路和一个什么路路口有个呃，右边有个喜来顺酒店，请您报一下路名。'
       seg#4: bg=54960ms ed=69200ms status=1 text='看一下，呃，就是北京路一直往南，到哦是广东路，北京路和广东路口。北京路和广东路口吗？对，北京路和广东路口。好的，我们马上派人过去。'
       seg#5: bg=69560ms ed=78200ms status=1 text='快点过来！请问先生，您贵姓？呃，不要管我是谁，就不重要。你们快点过来，再见。'
-      seg#6: bg=0ms ed=0ms status=2 text='' ⚠EMPTY
-  [✓] conn#009 sid=AST_ZV7DMS728MWAN
+      seg#5: bg=0ms ed=0ms status=2 text='' ⚠EMPTY
+  [✓] conn#040 sid=AST_VPTKCE9815R1N
       segments=7 has_final=True chunks_sent=2030
-      handshake=33ms e2e=89.6s
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-      seg#2: bg=31160ms ed=43280ms status=1 text='是北京路，在北京 house。北京路靠近什么地方？北京路和什么路路口？就是这条横马路，我说不太清楚这个地方，我看一下。'
-      seg#3: bg=43320ms ed=54360ms status=1 text='旁边有个喜来顺酒店，请再说清楚点儿。北京路和一个什么路路口有个呃，右边有个喜来顺酒店，请您报一下路名。'
-      seg#4: bg=54960ms ed=69200ms status=1 text='看一下，呃，就是北京路一直往南，到哦是广东路，北京路和广东路口。北京路和广东路口吗？对，北京路和广东路口。好的，我们马上派人过去。'
-      seg#5: bg=69560ms ed=78200ms status=1 text='快点过来！请问先生，您贵姓？呃，不要管我是谁，就不重要。你们快点过来，再见。'
-      seg#6: bg=0ms ed=0ms status=2 text='' ⚠EMPTY
-  [✓] conn#029 sid=AST_B4LXMW7RWRFRM
-      segments=7 has_final=True chunks_sent=2030
-      handshake=22ms e2e=84.8s
+      handshake=16ms e2e=86.3s
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
       seg#2: bg=31160ms ed=43280ms status=1 text='是北京路，在北京路上。北京路靠近什么地方？北京路和什么路路口？就是这条横马路，我说不太清楚这个地方，我看一下。'
-      seg#3: bg=43320ms ed=54360ms status=1 text='旁边有个ог个喜来顺酒店，请再说清楚点。北京路和一个什么路路口有个呃，右边有个喜来顺酒店，请您报一下路名。'
+      seg#3: bg=43320ms ed=54360ms status=1 text='旁边有个喜来顺酒店，请再说清楚点儿。北京路和一个什么路路口有个呃，右边有个喜来顺酒店，请您报一下路名。'
       seg#4: bg=54960ms ed=69200ms status=1 text='看一下，呃，就是北京路一直往南，到哦是广东路，北京路和广东路口。北京路和广东路口吗？对，北京路和广东路口。好的，我们马上派人过去。'
       seg#5: bg=69560ms ed=78200ms status=1 text='快点过来！请问先生，您贵姓？呃，不要管我是谁，就不重要。你们快点过来，再见。'
-      seg#6: bg=0ms ed=0ms status=2 text='' ⚠EMPTY
-  [✗] conn#000 sid=AST_SSCTA4J88XEI0
-      segments=2 has_final=False chunks_sent=1843
-      handshake=46ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#5: bg=0ms ed=0ms status=2 text='' ⚠EMPTY
+  [✓] conn#049 sid=AST_W83IHBJ9MNZAH
+      segments=7 has_final=True chunks_sent=2030
+      handshake=18ms e2e=89.6s
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#002 sid=AST_G01FIBDVEA5EX
-      segments=2 has_final=False chunks_sent=1841
-      handshake=33ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#003 sid=AST_1O0B9POMA7ALX
-      segments=2 has_final=False chunks_sent=1838
-      handshake=33ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#004 sid=AST_637HZLG1EPF4D
-      segments=2 has_final=False chunks_sent=1840
-      handshake=33ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#006 sid=AST_6ETL73DT7WKQB
-      segments=2 has_final=False chunks_sent=1840
-      handshake=33ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#007 sid=AST_WS6RKU5O8OE80
-      segments=2 has_final=False chunks_sent=1843
-      handshake=33ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#008 sid=AST_RTUCQSWNL8U2D
-      segments=2 has_final=False chunks_sent=1830
-      handshake=33ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#010 sid=AST_O0W08MRLBP9L1
+      seg#2: bg=31160ms ed=43280ms status=1 text='是北京路，在北京路上。北京路靠近什么地方？北京路和什么路路口？就是这条横马路，我说不太清楚这个地方，我看一下。'
+      seg#3: bg=43320ms ed=54360ms status=1 text='旁边有个喜来顺酒店，请再说清楚点儿。北京路和一个什么路路口有个呃，右边有个喜来顺酒店，请您报一下路名。'
+      seg#4: bg=54960ms ed=69200ms status=1 text='看一下，呃，就是北京路一直往南，到哦是广东路，北京路和广东路口。北京路和广东路口吗？对，北京路和广东路口。好的，我们马上派人过去。'
+      seg#5: bg=69560ms ed=78200ms status=1 text='快点过来！请问先生，您贵姓？呃，不要管我是谁，就不重要。你们快点过来，再见。'
+      seg#5: bg=0ms ed=0ms status=2 text='' ⚠EMPTY
+  [✗] conn#000 sid=AST_YX97DDYQ7O2Z3
       segments=2 has_final=False chunks_sent=1844
-      handshake=22ms e2e=0.0s
+      handshake=21ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#011 sid=AST_YT8764XBLE7Y4
-      segments=2 has_final=False chunks_sent=1845
+  [✗] conn#001 sid=AST_75FPB9TTJCHC5
+      segments=2 has_final=False chunks_sent=1844
+      handshake=19ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#002 sid=AST_C69TWRAZPR48J
+      segments=2 has_final=False chunks_sent=1844
       handshake=33ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#012 sid=AST_LG0YQ9UKCC6WA
+  [✗] conn#003 sid=AST_SJKKAKYP4W10J
+      segments=2 has_final=False chunks_sent=1838
+      handshake=20ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#004 sid=AST_V7HSTKHLT2ZBI
       segments=2 has_final=False chunks_sent=1841
-      handshake=22ms e2e=0.0s
+      handshake=21ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#013 sid=AST_8YJGC84MCV8A8
-      segments=2 has_final=False chunks_sent=1830
-      handshake=22ms e2e=0.0s
+  [✗] conn#005 sid=AST_F1RVG23TFF54D
+      segments=2 has_final=False chunks_sent=1828
+      handshake=21ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#014 sid=AST_U26XENB96SFP4
+  [✗] conn#006 sid=AST_AJ5B9CZ6KGLRR
+      segments=2 has_final=False chunks_sent=1838
+      handshake=21ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#007 sid=AST_XI2M96S4H074P
+      segments=2 has_final=False chunks_sent=1844
+      handshake=18ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#008 sid=AST_5AL82VNAKW8X4
       segments=2 has_final=False chunks_sent=1842
-      handshake=22ms e2e=0.0s
+      handshake=20ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#015 sid=AST_RL0D39NU5QDAQ
-      segments=2 has_final=False chunks_sent=1841
-      handshake=22ms e2e=0.0s
+  [✗] conn#009 sid=AST_61HTI8YQYIEIH
+      segments=2 has_final=False chunks_sent=1842
+      handshake=20ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#016 sid=AST_EXA8F4L90K4VD
-      segments=2 has_final=False chunks_sent=1830
-      handshake=22ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#017 sid=AST_R17MG9DO8IKIC
+  [✗] conn#010 sid=AST_JLM24MB70EQT7
       segments=2 has_final=False chunks_sent=1838
-      handshake=22ms e2e=0.0s
+      handshake=20ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#018 sid=AST_0CRUE54R2KCT0
-      segments=2 has_final=False chunks_sent=1830
-      handshake=22ms e2e=0.0s
+  [✗] conn#011 sid=AST_0Y6S9QVSZT7NJ
+      segments=2 has_final=False chunks_sent=1836
+      handshake=19ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#019 sid=AST_TB05Y12UFC44P
-      segments=2 has_final=False chunks_sent=1839
-      handshake=23ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#020 sid=AST_RY8RHGRWLE8G1
+  [✗] conn#012 sid=AST_XCURGW2M6Z5N4
       segments=2 has_final=False chunks_sent=1844
-      handshake=22ms e2e=0.0s
+      handshake=19ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#021 sid=AST_CLH2MHRZ2NADM
+  [✗] conn#013 sid=AST_PDKQF54Q23MF5
+      segments=2 has_final=False chunks_sent=1841
+      handshake=19ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#014 sid=AST_C5UBHIQH89MTG
+      segments=2 has_final=False chunks_sent=1842
+      handshake=19ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#015 sid=AST_2RVHCXWJVTJQ9
+      segments=2 has_final=False chunks_sent=1829
+      handshake=20ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#016 sid=AST_I5R9C5139I2O3
+      segments=2 has_final=False chunks_sent=1838
+      handshake=20ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#017 sid=AST_6LDFHKNWOHWZ9
+      segments=2 has_final=False chunks_sent=1838
+      handshake=19ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#018 sid=AST_YBQFYJX1DQQRV
       segments=2 has_final=False chunks_sent=1839
       handshake=20ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#022 sid=AST_9ZV9J99H5JKY7
+  [✗] conn#019 sid=AST_TTXB8QHU5OMCY
       segments=2 has_final=False chunks_sent=1839
-      handshake=23ms e2e=0.0s
+      handshake=19ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#023 sid=AST_NWHBEYDW3V3DZ
-      segments=2 has_final=False chunks_sent=1836
-      handshake=23ms e2e=0.0s
+  [✗] conn#020 sid=AST_CDB7NN41T1FG3
+      segments=2 has_final=False chunks_sent=1828
+      handshake=20ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#024 sid=AST_PIIIZVSA74GR2
+  [✗] conn#021 sid=AST_5WN9EMR9JG8CA
       segments=2 has_final=False chunks_sent=1842
-      handshake=23ms e2e=0.0s
+      handshake=20ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#025 sid=AST_97S078HIM5M53
-      segments=2 has_final=False chunks_sent=1843
-      handshake=23ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#026 sid=AST_5525XBSD0Q9BD
+  [✗] conn#022 sid=AST_ZDFF2NT9CWYXS
       segments=2 has_final=False chunks_sent=1842
-      handshake=22ms e2e=0.0s
+      handshake=19ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#027 sid=AST_2HWMI9LD7VPVI
-      segments=2 has_final=False chunks_sent=1842
-      handshake=22ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#028 sid=AST_435W39VKJ8B54
+  [✗] conn#023 sid=AST_1PBAJY3KZKRCE
       segments=2 has_final=False chunks_sent=1841
-      handshake=22ms e2e=0.0s
+      handshake=19ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#030 sid=AST_7XXKOFAM88089
-      segments=2 has_final=False chunks_sent=1840
-      handshake=22ms e2e=0.0s
+  [✗] conn#024 sid=AST_QX6VVAR19PHG7
+      segments=2 has_final=False chunks_sent=1842
+      handshake=20ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#031 sid=AST_59R4VCEUV49ZH
-      segments=2 has_final=False chunks_sent=1844
-      handshake=22ms e2e=0.0s
+  [✗] conn#025 sid=AST_S862KZQ940FAZ
+      segments=2 has_final=False chunks_sent=1839
+      handshake=20ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#032 sid=AST_003NL2E8UUOUB
-      segments=2 has_final=False chunks_sent=1841
-      handshake=22ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#033 sid=AST_WH4ASYHXI662M
+  [✗] conn#026 sid=AST_26BZ0K6ZN3WGF
       segments=2 has_final=False chunks_sent=1838
-      handshake=22ms e2e=0.0s
+      handshake=20ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#034 sid=AST_XLSCQEXXXIVMH
-      segments=2 has_final=False chunks_sent=1829
-      handshake=22ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#035 sid=AST_PWBU14VQFZISS
-      segments=2 has_final=False chunks_sent=1841
-      handshake=22ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#036 sid=AST_IC3VSHMIY8C86
-      segments=2 has_final=False chunks_sent=1839
-      handshake=22ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#037 sid=AST_BFRF6PPBZSYAW
-      segments=2 has_final=False chunks_sent=1839
-      handshake=21ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#038 sid=AST_UMJVEZOZ0VT3E
+  [✗] conn#027 sid=AST_WB2D33JRX3GEI
       segments=2 has_final=False chunks_sent=1842
-      handshake=22ms e2e=0.0s
+      handshake=19ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#039 sid=AST_GGCXC4LRUW017
-      segments=2 has_final=False chunks_sent=1839
-      handshake=22ms e2e=0.0s
+  [✗] conn#028 sid=AST_338747VQJYTIU
+      segments=2 has_final=False chunks_sent=1828
+      handshake=19ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#040 sid=AST_B4TF4ZLD10HYG
+  [✗] conn#029 sid=AST_J1HO46GBH4NCR
       segments=2 has_final=False chunks_sent=1842
-      handshake=21ms e2e=0.0s
+      handshake=20ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#041 sid=AST_WFGBWBFI78EIC
-      segments=2 has_final=False chunks_sent=1830
-      handshake=21ms e2e=0.0s
+  [✗] conn#030 sid=AST_YXYJ8O15GEJ7P
+      segments=2 has_final=False chunks_sent=1842
+      handshake=23ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#042 sid=AST_8AA6ZK20FB1G8
-      segments=2 has_final=False chunks_sent=1841
-      handshake=21ms e2e=0.0s
+  [✗] conn#031 sid=AST_247PLT8ZBVT5B
+      segments=2 has_final=False chunks_sent=1842
+      handshake=17ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#043 sid=AST_RUCK54SLA3UMB
-      segments=2 has_final=False chunks_sent=1841
+  [✗] conn#032 sid=AST_LQTKH72NBULI2
+      segments=2 has_final=False chunks_sent=1842
+      handshake=23ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#033 sid=AST_9VI0WLPCP7496
+      segments=2 has_final=False chunks_sent=1842
+      handshake=24ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#034 sid=AST_I7C32G6ZXJPI7
+      segments=2 has_final=False chunks_sent=1837
       handshake=22ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#044 sid=AST_7Y6K90OX8T2LM
+  [✗] conn#035 sid=AST_F8NA0ILLPTIE6
+      segments=3 has_final=False chunks_sent=1823
+      handshake=18ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+      seg#2: bg=31160ms ed=43280ms status=1 text='是北京路，在北京路上。北京路靠近什么地方？北京路和什么路路口？就是这条横马路，我说不太清楚这个地方，我看一下。'
+  [✗] conn#037 sid=AST_RJOOYR0T5QJJ7
+      segments=2 has_final=False chunks_sent=1837
+      handshake=18ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#038 sid=AST_6HO2U8BYQ1LGV
+      segments=2 has_final=False chunks_sent=1827
+      handshake=25ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#039 sid=AST_L2PLLGV472C7Z
+      segments=2 has_final=False chunks_sent=1837
+      handshake=19ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#041 sid=AST_PY8QNZYIAKVYK
       segments=2 has_final=False chunks_sent=1840
-      handshake=22ms e2e=0.0s
+      handshake=25ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#045 sid=AST_NW0RRG1FGPJ7G
+  [✗] conn#042 sid=AST_PRDCLJG73SIJI
+      segments=2 has_final=False chunks_sent=1840
+      handshake=23ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#043 sid=AST_O0RNTJNNNB9R1
+      segments=2 has_final=False chunks_sent=1838
+      handshake=17ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#044 sid=AST_J1QZTGUYNACRW
+      segments=2 has_final=False chunks_sent=1840
+      handshake=21ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#045 sid=AST_8JA7SU4HDBT7C
+      segments=2 has_final=False chunks_sent=1842
+      handshake=16ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#046 sid=AST_MTEM3FWFPZC4L
+      segments=2 has_final=False chunks_sent=1828
+      handshake=19ms e2e=0.0s
+      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
+      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
+  [✗] conn#047 sid=AST_IJAIY8X6JTH18
       segments=2 has_final=False chunks_sent=1843
-      handshake=22ms e2e=0.0s
+      handshake=25ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#046 sid=AST_NI6HV54QWFBVK
-      segments=2 has_final=False chunks_sent=1843
-      handshake=22ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#047 sid=AST_5ZYECCT26BXE2
-      segments=2 has_final=False chunks_sent=1839
-      handshake=22ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#048 sid=AST_KF18BI0I8WKO6
-      segments=2 has_final=False chunks_sent=1839
-      handshake=22ms e2e=0.0s
-      ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
-      seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
-      seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
-  [✗] conn#049 sid=AST_02NQ3VAAA33KS
-      segments=2 has_final=False chunks_sent=1843
-      handshake=22ms e2e=0.0s
+  [✗] conn#048 sid=AST_EV14W6V2VKF5S
+      segments=2 has_final=False chunks_sent=1840
+      handshake=25ms e2e=0.0s
       ERROR [exception]: ConnectionClosedError: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
       seg#0: bg=0ms ed=17200ms status=1 text='120 急救中心，喂，120 吗？有人受伤了，请你们快点过来。发生了什么事？发生了交通事故，有人受伤了。一辆小货车闯红灯，在路口与一辆小轿车相撞。'
       seg#1: bg=17440ms ed=30160ms status=1 text='小轿车又撞到了一个骑自行车的人，严重吗？骑自行车的人躺在地上一动也不动，旁边都是血，是个男的，一动也不动，你们快点过来。请问具体地点？'
