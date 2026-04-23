@@ -14,6 +14,7 @@ import asyncio
 import time
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from uvicorn.protocols.utils import ClientDisconnected
 
 from src.api.connection_manager import connection_manager
 from src.api.metrics import (
@@ -61,12 +62,14 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
     await websocket.accept()
     session = None
+    vad_session_closed = False
+    connection_slot_released = False
 
     try:
         # ---- 握手阶段（带超时） ----
         session = await _handle_handshake(websocket)
         if session is None:
-            return
+            await _wait_for_client_disconnect(websocket)
 
         # 注册连接
         connection_manager.register(session.sid, session.trace_id)
@@ -88,13 +91,19 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             elif msg.header.status == 2:
                 await _handle_end_frame(websocket, session)
-                break
+                try:
+                    await vad_pool.close_session(session.sid)
+                    vad_session_closed = True
+                except Exception:
+                    pass
+                await _wait_for_client_disconnect(websocket, session)
 
     except WebSocketDisconnect:
         logger.info("Client disconnected: sid=%s", session.sid if session else "?")
     except asyncio.TimeoutError:
         logger.warning("Handshake timeout")
         asr_errors_total.labels(error_type="handshake_timeout").inc()
+        await _wait_for_client_disconnect_safely(websocket, session)
     except Exception as exc:
         logger.exception("Unexpected error: %s", exc)
         asr_errors_total.labels(error_type="internal").inc()
@@ -102,19 +111,22 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             await _send_error(websocket, session, str(exc))
         except Exception:
             pass
+        await _wait_for_client_disconnect_safely(websocket, session)
     finally:
         # 释放 VAD 子进程端的会话资源
-        if session:
+        if session and not vad_session_closed:
             try:
                 await vad_pool.close_session(session.sid)
             except Exception:
                 pass
+            vad_session_closed = True
+        if session:
             connection_manager.unregister(session.sid)
+            connection_slot_released = True
             asr_connections_current.dec()
-        try:
-            await websocket.close()
-        except Exception:
-            pass
+        elif not connection_slot_released:
+            connection_manager.release_slot()
+            connection_slot_released = True
 
 
 # ============================================================
@@ -123,19 +135,18 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
 
 async def _handle_handshake(websocket: WebSocket) -> ASRSession | None:
-    """等待并处理握手帧，超时则断开。"""
+    """等待并处理握手帧；除并发上限外不主动关闭连接。"""
     try:
         raw = await asyncio.wait_for(
             websocket.receive_text(),
             timeout=settings.HANDSHAKE_TIMEOUT,
         )
     except asyncio.TimeoutError:
-        await websocket.close(code=1008, reason="Handshake timeout")
         raise
 
     msg = ClientMessage.model_validate_json(raw)
     if msg.header.status != 0:
-        await websocket.close(code=1008, reason="First message must be handshake (status=0)")
+        logger.warning("First message must be handshake (status=0)")
         return None
 
     session = ASRSession(
@@ -192,6 +203,30 @@ async def _handle_end_frame(websocket: WebSocket, session: ASRSession) -> None:
     else:
         # 没有残余音频，直接推送结束状态
         await _send_response(websocket, session, status=2, seg_id=session.seg_id)
+
+
+async def _wait_for_client_disconnect(
+    websocket: WebSocket,
+    session: ASRSession | None = None,
+) -> None:
+    """最终响应发出后保持连接打开，等待客户端主动关闭。"""
+    logger.info(
+        "Waiting for client close: sid=%s",
+        session.sid if session else "?",
+    )
+    while True:
+        await websocket.receive_text()
+
+
+async def _wait_for_client_disconnect_safely(
+    websocket: WebSocket,
+    session: ASRSession | None = None,
+) -> None:
+    """等待客户端关闭；吞掉断开异常，避免覆盖原始处理分支。"""
+    try:
+        await _wait_for_client_disconnect(websocket, session)
+    except (WebSocketDisconnect, RuntimeError):
+        logger.info("Client disconnected: sid=%s", session.sid if session else "?")
 
 
 async def _process_segment(
@@ -270,6 +305,13 @@ async def _process_segment(
             elapsed_ms,
         )
 
+    except (WebSocketDisconnect, ClientDisconnected):
+        logger.info(
+            "Client disconnected while sending segment: sid=%s, seg_id=%d",
+            session.sid,
+            seg_id,
+        )
+        raise
     except Exception as exc:
         logger.exception("Error processing segment %d: %s", seg_id, exc)
         asr_errors_total.labels(error_type="asr_inference").inc()

@@ -44,8 +44,12 @@ class ConnectionManager:
     def unregister(self, sid: str) -> None:
         """注销连接并释放槽位。"""
         self._active.pop(sid, None)
-        self._semaphore.release()
+        self.release_slot()
         logger.info("Connection unregistered: sid=%s", sid)
+
+    def release_slot(self) -> None:
+        """释放一个连接槽位。"""
+        self._semaphore.release()
 
     @property
     def active_count(self) -> int:
