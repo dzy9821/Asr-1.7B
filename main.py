@@ -80,3 +80,15 @@ if __name__ == "__main__":
         ws_ping_interval=settings.WS_PING_INTERVAL,
         ws_ping_timeout=settings.WS_PING_TIMEOUT,
     )
+else:
+    # 通过 CLI 启动时（uvicorn main:app），ping 超时由 CLI 参数或环境变量控制。
+    # 若未显式指定，uvicorn 默认 ws_ping_timeout=20s，在高并发下极易触发。
+    # 请使用：uvicorn main:app --ws-ping-interval 20 --ws-ping-timeout 300
+    import os
+
+    if not os.environ.get("UVICORN_WS_PING_TIMEOUT"):
+        logger.warning(
+            "⚠ Server started via CLI without --ws-ping-timeout. "
+            "Default is 20s which may cause keepalive failures under load. "
+            "Recommend: uvicorn main:app --ws-ping-interval 20 --ws-ping-timeout 300"
+        )

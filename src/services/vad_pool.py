@@ -17,6 +17,7 @@ VAD 多进程池 —— 基于 multiprocessing.Pool + Manager().Queue() 的生�
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import multiprocessing as mp
 import queue
 import threading
@@ -173,6 +174,11 @@ class VADPool:
         self._monitor_interval_sec = max(0.0, settings.MP_QUEUE_LOG_INTERVAL_SEC)
         self._monitor_running = threading.Event()
         self._monitor_thread: Optional[threading.Thread] = None
+        # 独立线程池，避免与 ITN / ASR 编码共用默认 executor 导致线程饥饿
+        self._executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=self._num_workers * self._connections_per_instance,
+            thread_name_prefix="vad-submit",
+        )
 
     def start(self) -> None:
         """
@@ -361,7 +367,7 @@ class VADPool:
         """
         loop = asyncio.get_running_loop()
         payload = await loop.run_in_executor(
-            None,
+            self._executor,
             self._submit,
             session_id,
             {
@@ -395,7 +401,7 @@ class VADPool:
         """异步刷出残余语音段。"""
         loop = asyncio.get_running_loop()
         payload = await loop.run_in_executor(
-            None,
+            self._executor,
             self._submit,
             session_id,
             {
@@ -418,7 +424,7 @@ class VADPool:
         """异步关闭会话（释放子进程端的 VAD 实例）。"""
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(
-            None,
+            self._executor,
             self._submit,
             session_id,
             {"op": "close", "session_id": session_id},

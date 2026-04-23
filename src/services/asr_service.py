@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import re
@@ -59,7 +60,11 @@ class ASRService:
         """
         assert self._client is not None, "ASRService not started"
 
-        data_url = _encode_audio_to_data_url(audio_int16, sr)
+        # CPU 密集型编码操作移出事件循环，避免阻塞 pong 响应
+        loop = asyncio.get_running_loop()
+        data_url = await loop.run_in_executor(
+            None, _encode_audio_to_data_url, audio_int16, sr
+        )
 
         messages: list[dict] = []
         if context:

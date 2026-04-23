@@ -201,8 +201,9 @@ async def _handle_end_frame(websocket: WebSocket, session: ASRSession) -> None:
     if seg is not None:
         await _process_segment(websocket, session, seg, is_final=True)
     else:
-        # 没有残余音频，直接推送结束状态
-        await _send_response(websocket, session, status=2, seg_id=session.seg_id)
+        # 没有残余音频，发送纯终态信号（复用最后一个 seg_id，不递增）
+        last_seg_id = max(0, session.seg_id - 1)
+        await _send_response(websocket, session, status=2, seg_id=last_seg_id)
 
 
 async def _wait_for_client_disconnect(

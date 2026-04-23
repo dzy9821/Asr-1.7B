@@ -18,6 +18,7 @@ ITN 多进程池 —— 基于 multiprocessing.Pool (spawn) 的生产实现。
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import multiprocessing as mp
 import queue
 import threading
@@ -128,6 +129,11 @@ class ITNPool:
         self._monitor_interval_sec = max(0.0, settings.MP_QUEUE_LOG_INTERVAL_SEC)
         self._monitor_running = threading.Event()
         self._monitor_thread: Optional[threading.Thread] = None
+        # 独立线程池，避免与 VAD / ASR 编码共用默认 executor
+        self._executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=self._num_workers * 4,
+            thread_name_prefix="itn-submit",
+        )
 
     def start(self) -> None:
         """
@@ -267,7 +273,7 @@ class ITNPool:
         if not text or not text.strip():
             return ""
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._submit, text)
+        return await loop.run_in_executor(self._executor, self._submit, text)
 
     @property
     def num_workers(self) -> int:
