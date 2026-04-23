@@ -13,6 +13,8 @@ class Settings:
     WS_PORT: int = int(os.getenv("WS_PORT", "8000"))
     MAX_CONNECTIONS: int = int(os.getenv("MAX_CONNECTIONS", "64"))
     HANDSHAKE_TIMEOUT: int = int(os.getenv("HANDSHAKE_TIMEOUT", "5"))
+    WS_PING_INTERVAL: float = float(os.getenv("WS_PING_INTERVAL", "20"))
+    WS_PING_TIMEOUT: float = float(os.getenv("WS_PING_TIMEOUT", "300"))
 
     # ---- VAD 多进程池 ----
     VAD_WORKERS: int = int(os.getenv("VAD_WORKERS", "32"))

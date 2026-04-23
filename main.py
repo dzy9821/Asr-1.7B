@@ -77,4 +77,6 @@ if __name__ == "__main__":
         host=settings.WS_HOST,
         port=settings.WS_PORT,
         log_level=settings.LOG_LEVEL.lower(),
+        ws_ping_interval=settings.WS_PING_INTERVAL,
+        ws_ping_timeout=settings.WS_PING_TIMEOUT,
     )
