@@ -86,9 +86,17 @@ Worker 进程
 └── Session B → TenVad 实例 B（独立 handle + 独立 hidden state）
 ```
 
-优化方向应聚焦在：
-- **实例池预热**：启动时预创建实例，避免首次连接的加载延迟（已实现）
-- **实例回收复用**：连接关闭时销毁旧实例、创建新实例放回空闲池（已实现）
-- **worker 数量调优**：通过 `VAD_WORKERS` 和 `VAD_CONNECTIONS_PER_INSTANCE` 控制总容量
+## 架构变更记录
 
-TenVad 单实例内存极小（~306KB），创建开销约 0.5ms，无需为节省实例数量而牺牲正确性。
+### 2026-04-27：从多进程池改为连接级实例
+
+**变更前**：`vad_pool.py` 使用 `multiprocessing.Pool`（32 worker，每 worker 服务 2 连接），按 `session_id` hash 路由，通过 `Manager().Queue()` 回传结果。
+
+**变更后**：删除 `vad_pool.py`，在 `ASRSession.__init__` 中直接创建 `StreamingVADSession` 实例，连接关闭时随 Session 销毁。
+
+**决策依据**：
+1. TenVad 内部维护时序隐藏状态，实例间不可共享（实验1：41.7% flag 污染）
+2. 逐帧丢弃上下文也不可行（实验2：9% flag 错误，probability 偏差 0.15）
+3. TenVad 非线程安全（实验3：AssertionError）
+4. 实例不可跨生命周期复用（实验4：double free crash）
+5. TenVad 极轻量（~306KB/实例，创建 ~0.5ms），多进程池的管理开销远大于实例本身

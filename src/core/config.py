@@ -16,10 +16,6 @@ class Settings:
     WS_PING_INTERVAL: float = float(os.getenv("WS_PING_INTERVAL", "20"))
     WS_PING_TIMEOUT: float = float(os.getenv("WS_PING_TIMEOUT", "300"))
 
-    # ---- VAD 多进程池 ----
-    VAD_WORKERS: int = int(os.getenv("VAD_WORKERS", "32"))
-    VAD_CONNECTIONS_PER_INSTANCE: int = int(os.getenv("VAD_CONNECTIONS_PER_INSTANCE", "2"))
-
     # ---- ITN 多进程池 ----
     ITN_WORKERS: int = int(os.getenv("ITN_WORKERS", "8"))
 

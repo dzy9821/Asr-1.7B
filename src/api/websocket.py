@@ -37,7 +37,6 @@ from src.models.schemas import (
 )
 from src.services.asr_service import ASRService, build_hotword_context
 from src.services.itn_pool import ITNPool
-from src.services.vad_pool import VADPool
 from src.utils.audio import decode_base64_pcm, samples_to_cs, samples_to_ms
 
 logger = get_logger(__name__)
@@ -46,7 +45,6 @@ router = APIRouter()
 
 # 服务实例（由 main.py 生命周期管理器初始化）
 asr_service: ASRService = ASRService()
-vad_pool: VADPool = VADPool()
 itn_pool: ITNPool = ITNPool()
 
 
@@ -62,7 +60,6 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
     await websocket.accept()
     session = None
-    vad_session_closed = False
     connection_slot_released = False
 
     try:
@@ -91,11 +88,6 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             elif msg.header.status == 2:
                 await _handle_end_frame(websocket, session)
-                try:
-                    await vad_pool.close_session(session.sid)
-                    vad_session_closed = True
-                except Exception:
-                    pass
                 await _wait_for_client_disconnect(websocket, session)
 
     except WebSocketDisconnect:
@@ -113,13 +105,6 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             pass
         await _wait_for_client_disconnect_safely(websocket, session)
     finally:
-        # 释放 VAD 子进程端的会话资源
-        if session and not vad_session_closed:
-            try:
-                await vad_pool.close_session(session.sid)
-            except Exception:
-                pass
-            vad_session_closed = True
         if session:
             connection_manager.unregister(session.sid)
             connection_slot_released = True
@@ -184,8 +169,8 @@ async def _handle_audio_frame(
     # Base64 解码
     pcm_int16 = decode_base64_pcm(msg.payload.audio.audio)
 
-    # 喂入 VAD（通过多进程池）
-    segments = await vad_pool.feed_audio(session.sid, pcm_int16)
+    # 喂入 VAD（连接级实例，同步调用）
+    segments = session.vad.feed_audio(pcm_int16)
 
     # 对每个触发的语音段执行 ASR + ITN
     for seg in segments:
@@ -196,8 +181,8 @@ async def _handle_end_frame(websocket: WebSocket, session: ASRSession) -> None:
     """处理结束帧：刷空 VAD 缓冲区并推送终态结果。"""
     session.set_closing()
 
-    # 强制刷出残余音频（通过多进程池）
-    seg = await vad_pool.flush(session.sid)
+    # 强制刷出残余音频
+    seg = session.vad.flush()
     if seg is not None:
         await _process_segment(websocket, session, seg, is_final=True)
     else:

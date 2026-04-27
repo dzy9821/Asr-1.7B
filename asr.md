@@ -28,7 +28,7 @@
 **并发与隔离策略**：
 
 - **异步 I/O**：WebSocket 连接处理使用 `asyncio` 支持高并发长连接。
-- **VAD 多进程池**：VAD 采用固定 **32 个实例** 的多进程池（`spawn` 模式），按会话 `session_id` hash 做亲和路由；**每 2 个连接共享 1 个 VAD 实例**，整体承载 **64 并发连接**。同一 VAD 实例内部通过任务队列串行处理 `feed/flush`，避免并发改写底层 C 运行时状态。结果通过 `Manager().Queue()` 跨进程安全回传。服务启动时 **eager init** 所有进程并**主动预加载 VAD 实例（Eager Loading）**，消除首连的冷加载延迟。
+- **VAD 连接级实例**：每个 WebSocket 连接在握手时创建独立的 `StreamingVADSession` 实例，连接关闭时随 Session 销毁。TenVad 内部维护时序隐藏状态，经实验验证无法在多个音频流间共享（详见 `vad.md`），因此采用连接级独占设计。TenVad 极轻量（~306KB/实例，创建 ~0.5ms），无需多进程池管理。
 - **ITN 多进程池**：ITN 采用固定 **8 个多进程实例**（`spawn` 模式），请求通过 Pool 内部队列自动负载均衡分发。每个进程预加载 `ITNProcessor` 单例，避免 GIL 限制下的 CPU 密集型 FST 计算瓶颈。结果通过 `Manager().Queue()` 跨进程安全回传。服务启动时 **eager init** 所有进程并预热模型。
 - **vLLM 服务化**：ASR 推理由独立容器内的 vLLM 服务承载，本服务通过 OpenAI 兼容 RESTful API 与其通信，vLLM 进程常驻，无需每次请求重启。
 
@@ -36,7 +36,7 @@
 
 1. **连接建立**：客户端连接至 `ws://host:port/tuling/asr/v3`，需在 **5 秒内**完成握手验证。系统最大并发连接数为 **64**。WebSocket 连接依赖底层的 Ping/Pong 机制维持（建议设置 `ping_interval=20`，`ping_timeout=300` 以适应高并发）。
 2. **音频接收**：客户端持续发送 Base64 编码的 PCM 音频帧。
-3. **语音活动检测**：VAD 服务实时分析音频流，检测话语结束（Endpoint）时触发回调。VAD 的 `hop_size` 固定为 **640 帧（40ms @ 16kHz）**，与客户端每 40ms 发送一帧音频的节律完全对齐，实现逐帧实时检测。连接会基于 `session_id` 固定路由到 32 个 VAD 实例之一；每个 VAD 实例最多服务 2 个连接，且实例内请求队列串行执行。
+3. **语音活动检测**：VAD 服务实时分析音频流，检测话语结束（Endpoint）时触发回调。VAD 的 `hop_size` 固定为 **640 帧（40ms @ 16kHz）**，与客户端每 40ms 发送一帧音频的节律完全对齐，实现逐帧实时检测。每个连接持有独立的 `StreamingVADSession` 实例，保证时序状态隔离。
    - **动态转写触发规则**：停顿等待时间随已收集语音长度线性缩短，具体逻辑如下：
      - **短音频抑制**：语音时长 `< 0.5s`，视为噪声或误触，不触发（继续等待）。
      - **长音频强制触发**：语音时长 `> 15.0s`，无论停顿多久立即触发，防止缓冲区堆积。
@@ -191,14 +191,12 @@
 | 变量名 | 默认值 | 说明 |
 | :--- | :--- | :--- |
 | `WS_HOST` / `WS_PORT` | 0.0.0.0 / 8000 | 服务监听地址与端口。 |
-| `VAD_WORKERS` | 32 | VAD 多进程池中的实例数（固定容量设计，`spawn` 模式）。 |
-| `VAD_CONNECTIONS_PER_INSTANCE` | 2 | 每个 VAD 实例承载的连接数上限；同一实例内请求串行处理。 |
 | `ITN_WORKERS` | 8 | ITN 多进程池实例数（固定容量设计，`spawn` 模式）。每个进程预加载 `ITNProcessor` 单例。 |
-| `MAX_CONNECTIONS` | 64 | 最大并发 WebSocket 连接数限制；按 `VAD_WORKERS * VAD_CONNECTIONS_PER_INSTANCE` 计算，超限时**直接拒绝**新连接（WebSocket close code `1013 Try Again Later`）。未来可调整实例数，但会维持最大并发为 VAD 实例数的整倍数。 |
+| `MAX_CONNECTIONS` | 64 | 最大并发 WebSocket 连接数限制，超限时**直接拒绝**新连接（WebSocket close code `1013 Try Again Later`）。 |
 | `HANDSHAKE_TIMEOUT` | 5 | 握手超时时间（秒），连接建立后须在此时间内完成首帧验证。 |
 | `WS_PING_INTERVAL` | 20 | WebSocket 心跳（Ping）发送间隔（秒）。 |
 | `WS_PING_TIMEOUT` | 300 | WebSocket 心跳超时时间（秒）。高并发下设置较长以避免误判掉线。 |
-| `MP_QUEUE_LOG_INTERVAL_SEC` | 10 | 多进程池队列深度监控日志打印间隔。 |
+| `MP_QUEUE_LOG_INTERVAL_SEC` | 10 | ITN 多进程池队列深度监控日志打印间隔（秒）。 |
 | `VLLM_API_BASE` | http://148.148.52.127:15002/v1 | vLLM 服务的 OpenAI 兼容 API 地址。 |
 | `VLLM_MODEL_NAME` | Qwen3-ASR-1.7B | vLLM 中加载的 ASR 模型名称。 |
 | `VLLM_API_KEY` | EMPTY | vLLM API 密钥（默认无鉴权）。 |
@@ -280,7 +278,7 @@ docker-compose -f docker-compose.yaml up -d
 | **音频识别无结果** | 确认发送音频为 **PCM 16k/16bit** 格式，且 Base64 编码正确；检查 vLLM 服务是否可达（`curl $VLLM_API_BASE/models`）。 |
 | **NPU 显存溢出（OOM）** | vLLM-Ascend 启动参数中调整 `--gpu-memory-utilization`；或降低 `MAX_CONNECTIONS` 以减少并发推理请求数。 |
 | **识别延迟高** | 查看 `asr_queue_depth` 是否持续升高；检查 vLLM 侧延迟；考虑扩容 vLLM 实例或降低并发连接数。 |
-| **VAD/ITN 进程池启动慢** | 使用 `spawn` 模式的多进程池启动较慢属正常现象（需序列化并重新加载模型）。启动期间服务不可用，Readiness Probe 会返回 `not_ready`。 |
+| **ITN 进程池启动慢** | 使用 `spawn` 模式的多进程池启动较慢属正常现象（需序列化并重新加载模型）。启动期间服务不可用，Readiness Probe 会返回 `not_ready`。 |
 
 ### 7.1 调试模式开启
 
@@ -303,12 +301,12 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ws-ping-interval 20 --ws
 - [x] JSON 结构化日志 + trace_id 上下文注入（`logging.py`）
 - [x] 请求/响应 Pydantic 数据模型（`schemas.py`，对齐 §3 接口协议）
 - [x] 流式 VAD 断句服务（`vad_service.py`，动态停顿阈值 + 强制触发）
-- [x] VAD 多进程池（`vad_pool.py`，32 实例 spawn 模式 + session hash 路由 + Queue 结果回传 + eager init）
+- [x] VAD 连接级实例（`vad_service.py`，每连接独立 `StreamingVADSession`，无需多进程池）
 - [x] 异步 ASR 推理服务（`asr_service.py`，httpx → vLLM OpenAI 兼容接口）
 - [x] ITN 多进程池（`itn_pool.py`，8 实例 spawn 模式 + Pool 内部负载均衡 + Queue 结果回传 + eager init 预热）
 - [x] WebSocket 全链路处理（`websocket.py`，握手→音频→断句→推理→推送）
 - [x] 并发连接管理（`connection_manager.py`，Semaphore + 1013 拒绝）
-- [x] 会话状态机（`session.py`，sid 生成、seg_id 递增；VAD 由全局池管理，Session 不直接持有）
+- [x] 会话状态机（`session.py`，sid 生成、seg_id 递增；每 Session 持有独立 VAD 实例）
 - [x] 健康探针与 Prometheus 指标暴露（`health.py`、`metrics.py`）
 - [x] 虚拟环境与依赖安装（含 WeTextProcessing），本地启动验证通过
 
