@@ -34,7 +34,7 @@
 
 ### 2.2 数据流详解
 
-1. **连接建立**：客户端连接至 `ws://host:port/tuling/asr/v3`，需在 **5 秒内**完成握手验证（携带 `traceId`、`appId`、`bizId`）。系统最大并发连接数为 **64**。
+1. **连接建立**：客户端连接至 `ws://host:port/tuling/asr/v3`，需在 **5 秒内**完成握手验证。系统最大并发连接数为 **64**。WebSocket 连接依赖底层的 Ping/Pong 机制维持（建议设置 `ping_interval=20`，`ping_timeout=300` 以适应高并发）。
 2. **音频接收**：客户端持续发送 Base64 编码的 PCM 音频帧。
 3. **语音活动检测**：VAD 服务实时分析音频流，检测话语结束（Endpoint）时触发回调。VAD 的 `hop_size` 固定为 **640 帧（40ms @ 16kHz）**，与客户端每 40ms 发送一帧音频的节律完全对齐，实现逐帧实时检测。连接会基于 `session_id` 固定路由到 32 个 VAD 实例之一；每个 VAD 实例最多服务 2 个连接，且实例内请求队列串行执行。
    - **动态转写触发规则**：停顿等待时间随已收集语音长度线性缩短，具体逻辑如下：
@@ -61,7 +61,7 @@
 4. **第三段（"特别是下午会不会下雨"） —— 客户端主动结束触发**：
    - **输入**：用户最后说了 3s 的内容。说完后，用户立刻松开语音按钮或关闭麦克风，客户端发送结束帧（`status: 2`）。
    - **VAD 判定**：服务端收到 `status: 2`，无视当前是否达到停顿阈值，**强制截断并触发最后一段的转写**。
-   - **ASR 与推送**：截取最后 3s 音频请求 vLLM。处理完成后，向客户端推送最终结果"特别是下午会不会下雨"（附带 `segId: 2` 和整体结束状态 `status: 2`）。结果发送完毕后，服务端正常断开 WebSocket 连接，本次会话结束。
+   - **ASR 与推送**：截取最后 3s 音频请求 vLLM。处理完成后，向客户端推送最终结果"特别是下午会不会下雨"（附带 `segId: 2` 和整体结束状态 `status: 2`）。结果发送完毕后，**服务端不会主动断开 WebSocket 连接**，而是等待客户端主动关闭，以防止提前断连导致结果未送达或状态异常。
 
 ---
 
@@ -196,6 +196,9 @@
 | `ITN_WORKERS` | 8 | ITN 多进程池实例数（固定容量设计，`spawn` 模式）。每个进程预加载 `ITNProcessor` 单例。 |
 | `MAX_CONNECTIONS` | 64 | 最大并发 WebSocket 连接数限制；按 `VAD_WORKERS * VAD_CONNECTIONS_PER_INSTANCE` 计算，超限时**直接拒绝**新连接（WebSocket close code `1013 Try Again Later`）。未来可调整实例数，但会维持最大并发为 VAD 实例数的整倍数。 |
 | `HANDSHAKE_TIMEOUT` | 5 | 握手超时时间（秒），连接建立后须在此时间内完成首帧验证。 |
+| `WS_PING_INTERVAL` | 20 | WebSocket 心跳（Ping）发送间隔（秒）。 |
+| `WS_PING_TIMEOUT` | 300 | WebSocket 心跳超时时间（秒）。高并发下设置较长以避免误判掉线。 |
+| `MP_QUEUE_LOG_INTERVAL_SEC` | 10 | 多进程池队列深度监控日志打印间隔。 |
 | `VLLM_API_BASE` | http://148.148.52.127:15002/v1 | vLLM 服务的 OpenAI 兼容 API 地址。 |
 | `VLLM_MODEL_NAME` | Qwen3-ASR-1.7B | vLLM 中加载的 ASR 模型名称。 |
 | `VLLM_API_KEY` | EMPTY | vLLM API 密钥（默认无鉴权）。 |
@@ -218,7 +221,7 @@
 pip install -r requirements.txt
 
 # 服务启动
-python -m uvicorn main:app --host 0.0.0.0 --port 8000
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ws-ping-interval 20 --ws-ping-timeout 300
 
 # Docker 部署
 docker-compose -f docker-compose.yaml up -d
@@ -271,6 +274,7 @@ docker-compose -f docker-compose.yaml up -d
 
 | 常见问题 | 排查步骤与解决方案 |
 | :--- | :--- |
+| **WebSocket 频繁断开 (1006)** | 高并发下事件循环偶发阻塞，导致 Ping 超时。启动时需加上 `--ws-ping-timeout 300`。 |
 | **握手超时（5s 断开）** | 检查客户端发送的 JSON 是否包含必填字段 `traceId`、`bizId`，以及 `header.status` 是否正确设为 `0`（握手帧）。 |
 | **模型加载失败** | 执行 `curl http://localhost:8000/api/v1/ready` 查看状态；检查 `weights/` 目录挂载权限；确认 vLLM 容器已正常启动。 |
 | **音频识别无结果** | 确认发送音频为 **PCM 16k/16bit** 格式，且 Base64 编码正确；检查 vLLM 服务是否可达（`curl $VLLM_API_BASE/models`）。 |
@@ -282,7 +286,7 @@ docker-compose -f docker-compose.yaml up -d
 
 ```bash
 export LOG_LEVEL=DEBUG
-python -m uvicorn main:app --host 0.0.0.0 --port 8000
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ws-ping-interval 20 --ws-ping-timeout 300
 ```
 
 ---
@@ -312,10 +316,10 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000
 
 - [ ] **[P0]** 端到端联调：连接远程 vLLM ASR，跑通完整管线
 - [ ] **[P0]** VAD 流式断句验证：用真实音频验证断句准确性与时间戳
-- [ ] **[P1]** WebSocket 测试客户端脚本：模拟客户端发送音频
+- [x] **[P1]** WebSocket 测试客户端脚本与并发压测脚本 (`ws_stress_test.py` / `client.java`)
 - [ ] **[P1]** docker-compose.yaml：vLLM-Ascend 容器编排 + 环境变量注入
 - [ ] **[P1]** Dockerfile：镜像打包（代码+依赖），权重 Volume 挂载
-- [ ] **[P2]** 异常恢复与重试策略
-- [ ] **[P2]** 多并发压力测试
+- [x] **[P2]** 异常恢复与重试策略 (vLLM 断连自动重试，阻塞操作移出 Event Loop)
+- [x] **[P2]** 多并发压力测试 (服务端不主动断开连接，避免读写冲突)
 - [ ] **[P2]** 单元测试覆盖
 - [ ] **[P3]** Grafana 监控面板
