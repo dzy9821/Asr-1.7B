@@ -36,7 +36,8 @@ logger = get_logger(__name__)
 # Worker 进程内全局变量（每个进程独立副本）
 # ============================================================
 
-_SESSIONS: dict[str, object] = {}
+_ACTIVE_SESSIONS: dict[str, object] = {}
+_FREE_SESSIONS: list[object] = []
 _RESULT_QUEUE: Any = None
 
 
@@ -48,11 +49,20 @@ def _safe_qsize(queue_obj: Any) -> Optional[int]:
         return None
 
 
-def _init_worker(result_queue: Any) -> None:
-    """Pool initializer：子进程启动时执行一次。"""
-    global _RESULT_QUEUE, _SESSIONS
+def _init_worker(result_queue: Any, connections_per_instance: int = 2) -> None:
+    """Pool initializer：子进程启动时执行一次，主动预加载 VAD 实例（Eager Loading）。"""
+    global _RESULT_QUEUE, _ACTIVE_SESSIONS, _FREE_SESSIONS
     _RESULT_QUEUE = result_queue
-    _SESSIONS = {}
+    _ACTIVE_SESSIONS = {}
+    _FREE_SESSIONS = []
+    
+    from src.services.vad_service import StreamingVADSession
+    logger.info("VAD worker process initializing: pid=%d, preloading %d instances...", 
+                mp.current_process().pid, connections_per_instance)
+    
+    for _ in range(connections_per_instance):
+        _FREE_SESSIONS.append(StreamingVADSession())
+        
     logger.info("VAD worker process initialized: pid=%d", mp.current_process().pid)
 
 
@@ -85,12 +95,15 @@ def _worker_process_task(task: dict) -> None:
     hop_size = int(task.get("hop_size", 640))
 
     try:
-        session = _SESSIONS.get(session_id)
+        session = _ACTIVE_SESSIONS.get(session_id)
         if session is None and op in {"feed", "flush"}:
-            session = StreamingVADSession(
-                sample_rate=sample_rate, hop_size=hop_size
-            )
-            _SESSIONS[session_id] = session
+            if _FREE_SESSIONS:
+                session = _FREE_SESSIONS.pop()
+            else:
+                session = StreamingVADSession(
+                    sample_rate=sample_rate, hop_size=hop_size
+                )
+            _ACTIVE_SESSIONS[session_id] = session
 
         if op == "feed":
             pcm_bytes = task["audio_bytes"]
@@ -113,7 +126,12 @@ def _worker_process_task(task: dict) -> None:
             }
 
         elif op == "close":
-            _SESSIONS.pop(session_id, None)
+            session = _ACTIVE_SESSIONS.pop(session_id, None)
+            if session is not None:
+                # 补充新实例到空闲池，避免下个连接冷启动
+                _FREE_SESSIONS.append(StreamingVADSession(
+                    sample_rate=sample_rate, hop_size=hop_size
+                ))
             payload = {"closed": True}
 
         else:
@@ -191,7 +209,7 @@ class VADPool:
             pool = self._ctx.Pool(
                 processes=1,
                 initializer=_init_worker,
-                initargs=(result_q,),
+                initargs=(result_q, self._connections_per_instance),
             )
             runtime = _WorkerRuntime(
                 pool=pool,

@@ -28,7 +28,7 @@
 **并发与隔离策略**：
 
 - **异步 I/O**：WebSocket 连接处理使用 `asyncio` 支持高并发长连接。
-- **VAD 多进程池**：VAD 采用固定 **32 个实例** 的多进程池（`spawn` 模式），按会话 `session_id` hash 做亲和路由；**每 2 个连接共享 1 个 VAD 实例**，整体承载 **64 并发连接**。同一 VAD 实例内部通过任务队列串行处理 `feed/flush`，避免并发改写底层 C 运行时状态。结果通过 `Manager().Queue()` 跨进程安全回传。服务启动时 **eager init** 所有进程。
+- **VAD 多进程池**：VAD 采用固定 **32 个实例** 的多进程池（`spawn` 模式），按会话 `session_id` hash 做亲和路由；**每 2 个连接共享 1 个 VAD 实例**，整体承载 **64 并发连接**。同一 VAD 实例内部通过任务队列串行处理 `feed/flush`，避免并发改写底层 C 运行时状态。结果通过 `Manager().Queue()` 跨进程安全回传。服务启动时 **eager init** 所有进程并**主动预加载 VAD 实例（Eager Loading）**，消除首连的冷加载延迟。
 - **ITN 多进程池**：ITN 采用固定 **8 个多进程实例**（`spawn` 模式），请求通过 Pool 内部队列自动负载均衡分发。每个进程预加载 `ITNProcessor` 单例，避免 GIL 限制下的 CPU 密集型 FST 计算瓶颈。结果通过 `Manager().Queue()` 跨进程安全回传。服务启动时 **eager init** 所有进程并预热模型。
 - **vLLM 服务化**：ASR 推理由独立容器内的 vLLM 服务承载，本服务通过 OpenAI 兼容 RESTful API 与其通信，vLLM 进程常驻，无需每次请求重启。
 
