@@ -59,13 +59,13 @@
 | **依赖** | 虚拟环境搭建 + 全部依赖安装（含 WeTextProcessing），服务本地启动验证通过 |
 | **高可用** | asr_service 增加 HTTP 断连重试机制，并移出阻塞操作以保障 WebSocket 心跳响应 |
 | **压测** | 完成 Java 与 Python 版多并发压测脚本，跑通了 50+ 连接并发测试 |
+| **联调** | **[P0]** 端到端联调：连接远程 vLLM ASR 模型，验证完整的 音频→VAD→ASR→ITN→推送 链路 |
+| **验证** | **[P0]** VAD 流式断句验证：用真实音频测试 `StreamingVADSession` 的断句准确性和时间戳正确性 |
 
 ### 🔲 待完成
 
 | 优先级 | 任务 | 说明 |
 |:--|:--|:--|
-| **P0** | 端到端联调 | 连接远程 vLLM ASR 模型，验证完整的 音频→VAD→ASR→ITN→推送 链路 |
-| **P0** | VAD 流式断句验证 | 用真实音频测试 `StreamingVADSession` 的断句准确性和时间戳正确性 |
 | **P1** | docker-compose.yaml 编写 | 基于 `vllm-ascend:0.18` 镜像编排，配置 NPU 设备映射、Volume 挂载、环境变量注入 |
 | **P1** | Dockerfile 编写 | 基础镜像打包（代码 + 依赖），权重通过 Volume 挂载 |
 | **P2** | 单元测试 | 核心模块（VAD 动态阈值、音频编解码、Schema 序列化）的单元测试覆盖 |

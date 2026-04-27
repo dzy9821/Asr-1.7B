@@ -309,11 +309,11 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ws-ping-interval 20 --ws
 - [x] 会话状态机（`session.py`，sid 生成、seg_id 递增；每 Session 注册至 VAD 批处理器，close() 时注销）
 - [x] 健康探针与 Prometheus 指标暴露（`health.py`、`metrics.py`）
 - [x] 虚拟环境与依赖安装（含 WeTextProcessing + PyTorch），本地启动验证通过
+- [x] **[P0]** 端到端联调：连接远程 vLLM ASR，跑通完整管线
+- [x] **[P0]** VAD 流式断句验证：用真实音频验证 Silero VAD 断句准确性与时间戳
 
 ### 待完成
 
-- [ ] **[P0]** 端到端联调：连接远程 vLLM ASR，跑通完整管线
-- [ ] **[P0]** VAD 流式断句验证：用真实音频验证 Silero VAD 断句准确性与时间戳
 - [x] **[P1]** WebSocket 测试客户端脚本与并发压测脚本 (`ws_stress_test.py` / `client.java`)
 - [ ] **[P1]** docker-compose.yaml：vLLM-Ascend 容器编排 + 环境变量注入
 - [ ] **[P1]** Dockerfile：镜像打包（代码+依赖），权重 Volume 挂载
