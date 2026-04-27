@@ -5,13 +5,14 @@ import torchaudio
 import psutil
 import numpy as np
 
-# Add local path to sys.path
+# Add models/vad path to sys.path
 import sys
-sys.path.append("/home/ubuntu/project/vad-test")
+models_vad_dir = os.path.join(os.path.dirname(__file__), "..", "..", "models", "vad")
+sys.path.append(models_vad_dir)
 
 from ten_vad_wrapper import TenVADWrapper
 
-wav_path = "/home/ubuntu/project/vad-test/120报警电话16k.wav"
+wav_path = os.path.join(os.path.dirname(__file__), "..", "..", "120报警电话16k.wav")
 
 def measure_memory():
     process = psutil.Process(os.getpid())
@@ -57,7 +58,8 @@ if ten_vads:
 # 2. Silero VAD Custom Frame Check
 print("\n--- Silero VAD Frame Size Check ---")
 try:
-    model, utils = torch.hub.load(repo_or_dir='/home/ubuntu/project/vad-test/silero-vad', model='silero_vad', source='local', force_reload=True)
+    silero_vad_dir = os.path.join(os.path.dirname(__file__), "..", "..", "models", "vad", "silero-vad")
+    model, utils = torch.hub.load(repo_or_dir=silero_vad_dir, model='silero_vad', source='local', force_reload=True)
     (get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
     
     # 40ms = 640 samples
@@ -84,7 +86,7 @@ mem_before = measure_memory()
 silero_vads = []
 try:
     for i in range(20):
-        m, _ = torch.hub.load(repo_or_dir='/home/ubuntu/project/vad-test/silero-vad', model='silero_vad', source='local')
+        m, _ = torch.hub.load(repo_or_dir=silero_vad_dir, model='silero_vad', source='local')
         silero_vads.append(m)
     mem_after = measure_memory()
     print(f"Memory after loading 20 Silero VAD instances: {mem_after - mem_before:.2f} MB")

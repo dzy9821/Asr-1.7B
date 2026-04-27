@@ -2,8 +2,9 @@ import time
 import torch
 import soundfile as sf
 import gc
+import os
 
-wav_path = "/home/ubuntu/project/vad-test/120报警电话16k.wav"
+wav_path = os.path.join(os.path.dirname(__file__), "..", "..", "120报警电话16k.wav")
 
 def extract_segments(speech_probs, threshold=0.5, sampling_rate=16000, window_size_samples=512):
     # Standard Silero logic implementation for baseline comparison
@@ -183,7 +184,8 @@ def main():
     audio_tensor = torch.from_numpy(audio_data[:160000])
 
     print("Loading Silero VAD model...")
-    model, utils = torch.hub.load(repo_or_dir='/home/ubuntu/project/vad-test/silero-vad', model='silero_vad', source='local')
+    silero_vad_dir = os.path.join(os.path.dirname(__file__), "..", "..", "models", "vad", "silero-vad")
+    model, utils = torch.hub.load(repo_or_dir=silero_vad_dir, model='silero_vad', source='local')
     torch.set_grad_enabled(False) # Ensure no grad
     
     # 建立一个基准结果（BatchSize=1, Concurrency=1）用于验证分段时间戳的一致性
