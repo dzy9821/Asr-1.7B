@@ -8,7 +8,7 @@
 
 | 组件 | 模型/引擎 | 推理设备 | 说明 |
 | :--- | :--- | :--- | :--- |
-| **VAD** | ten-vad | CPU | 检测语音活动端点，实现精准断句；依赖原生 C 动态库（`libten_vad.so`），需在镜像内安装。 |
+| **VAD** | Silero VAD (v5, JIT) | CPU | 检测语音活动端点，实现精准断句；基于 PyTorch JIT 模型，支持 **动态批处理**（单实例同时服务所有并发连接）。 |
 | **ASR** | Qwen/Qwen3-ASR-1.7B | **Ascend NPU** | 核心语音识别模型，基于 **vLLM-Ascend v0.18** 高性能推理；vLLM 服务与本推理服务共同打包进同一镜像，对外暴露 OpenAI 兼容 RESTful API，本服务通过 HTTP 调用该接口完成推理。 |
 | **ITN** | fst_itn_zh | CPU | 逆文本正则化，如将"幺幺零"转换为"110"；依赖 Python 包 `WeTextProcessing`，需在镜像内安装。 |
 
@@ -28,7 +28,7 @@
 **并发与隔离策略**：
 
 - **异步 I/O**：WebSocket 连接处理使用 `asyncio` 支持高并发长连接。
-- **VAD 连接级实例**：每个 WebSocket 连接在握手时创建独立的 `StreamingVADSession` 实例，连接关闭时随 Session 销毁。TenVad 内部维护时序隐藏状态，经实验验证无法在多个音频流间共享（详见 `vad.md`），因此采用连接级独占设计。TenVad 极轻量（~306KB/实例，创建 ~0.5ms），无需多进程池管理。
+- **VAD 动态批处理**：采用 Silero VAD **全局单实例 + 动态批处理** 架构。服务启动时加载一个 Silero JIT 模型（`SileroVADBatchProcessor` 全局单例），每个连接的时序状态（RNN context + hidden state）在服务端外部管理。后台 asyncio Task 从队列中收集多个连接的帧请求，凑批后统一执行一次 batch forward，再将概率结果分发给各连接。经压测验证，单实例 + batch_size=256 可在实时约束内服务 **500 路并发**（RTF < 1.0）。每个连接持有独立的 `StreamingVADSession`，负责帧缓冲与动态阈值断句逻辑。
 - **ITN 多进程池**：ITN 采用固定 **8 个多进程实例**（`spawn` 模式），请求通过 Pool 内部队列自动负载均衡分发。每个进程预加载 `ITNProcessor` 单例，避免 GIL 限制下的 CPU 密集型 FST 计算瓶颈。结果通过 `Manager().Queue()` 跨进程安全回传。服务启动时 **eager init** 所有进程并预热模型。
 - **vLLM 服务化**：ASR 推理由独立容器内的 vLLM 服务承载，本服务通过 OpenAI 兼容 RESTful API 与其通信，vLLM 进程常驻，无需每次请求重启。
 
@@ -36,7 +36,7 @@
 
 1. **连接建立**：客户端连接至 `ws://host:port/tuling/asr/v3`，需在 **5 秒内**完成握手验证。系统最大并发连接数为 **64**。WebSocket 连接依赖底层的 Ping/Pong 机制维持（建议设置 `ping_interval=20`，`ping_timeout=300` 以适应高并发）。
 2. **音频接收**：客户端持续发送 Base64 编码的 PCM 音频帧。
-3. **语音活动检测**：VAD 服务实时分析音频流，检测话语结束（Endpoint）时触发回调。VAD 的 `hop_size` 固定为 **640 帧（40ms @ 16kHz）**，与客户端每 40ms 发送一帧音频的节律完全对齐，实现逐帧实时检测。每个连接持有独立的 `StreamingVADSession` 实例，保证时序状态隔离。
+3. **语音活动检测**：VAD 服务实时分析音频流，检测话语结束（Endpoint）时触发回调。Silero VAD 的 `window_size` 固定为 **512 samples（32ms @ 16kHz）**。客户端发送的音频在服务端内部被重新切片为 512-sample 帧后提交至全局批处理器。每个连接持有独立的 `StreamingVADSession` 实例，保证时序状态隔离（状态由批处理器外部管理）。
    - **动态转写触发规则**：停顿等待时间随已收集语音长度线性缩短，具体逻辑如下：
      - **短音频抑制**：语音时长 `< 0.5s`，视为噪声或误触，不触发（继续等待）。
      - **长音频强制触发**：语音时长 `> 15.0s`，无论停顿多久立即触发，防止缓冲区堆积。
@@ -162,6 +162,7 @@
 - **Web 框架**：FastAPI + websockets ^12.0
 - **推理引擎**：**vLLM-Ascend v0.18**（与本推理服务打包于同一镜像，提供 OpenAI 兼容 API）
 - **数据处理**：NumPy ==1.26.4
+- **VAD 推理**：PyTorch >=2.0.0 + torchaudio >=2.0.0（Silero VAD JIT 模型依赖）
 - **数据校验**：Pydantic >=2.5.0 + pydantic-settings >=2.0.0
 - **服务器**：Uvicorn（Standard）
 - **可观测性**：prometheus-client
@@ -170,7 +171,7 @@
 
 | 组件 | 依赖 | 安装方式 | 说明 |
 | :--- | :--- | :--- | :--- |
-| **VAD** | `libten_vad.so` 原生 C 动态库 | 镜像构建阶段复制至系统库路径 | ten-vad 底层推理运行时，`models/vad/ten-vad/` 目录下已包含预编译产物 |
+| **VAD** | Silero VAD JIT 模型 (`silero_vad.jit`) | 已包含在项目 `models/vad/silero-vad/` 目录 | 基于 PyTorch JIT 的 VAD 模型，通过 `torch.hub.load(source='local')` 加载，无需额外安装原生库 |
 | **ITN** | `WeTextProcessing` | `pip install 'git+https://github.com/wenet-e2e/WeTextProcessing.git'` | 提供 `itn.chinese.inverse_normalizer.InverseNormalizer` |
 
 ### 4.3 开发与质量保障工具
@@ -229,14 +230,13 @@ docker-compose -f docker-compose.yaml up -d
 
 完整推理服务（含 vLLM-Ascend 引擎与本推理服务）统一打包进同一镜像，**基础镜像为 `vllm-ascend:0.18`**。构建时需完成以下步骤：
 
-1. **安装 VAD 原生 C 库**：将 `models/vad/ten-vad/` 下的预编译 `.so` 文件复制至镜像系统库路径（如 `/usr/local/lib`），并执行 `ldconfig`。
-2. **安装 ITN Python 包**：
+1. **安装 ITN Python 包**：
    ```bash
    pip install 'git+https://github.com/wenet-e2e/WeTextProcessing.git'
    ```
-3. **复制项目代码**：将完整项目（含 `models/`、`src/` 等）COPY 进镜像。**注意**：`weights/` 目录不 COPY 进镜像，通过 Volume 挂载。
-4. **安装项目依赖**：`pip install -r requirements.txt`（或 `uv sync`）。
-5. **设置启动命令**：用户手动执行 vLLM 服务与本推理服务的启动命令。
+2. **复制项目代码**：将完整项目（含 `models/`、`src/` 等）COPY 进镜像。Silero VAD JIT 模型已包含在 `models/vad/silero-vad/` 目录中，无需额外安装原生库。**注意**：`weights/` 目录不 COPY 进镜像，通过 Volume 挂载。
+3. **安装项目依赖**：`pip install -r requirements.txt`（或 `uv sync`）。PyTorch 如已在基础镜像中预装则无需重复安装。
+4. **设置启动命令**：用户手动执行 vLLM 服务与本推理服务的启动命令。
 
 > **注意**：ASR 模型权重（`weights/Qwen3-ASR-1.7B/`）**必须以 Volume 形式挂载**，不打入镜像，以控制镜像体积并方便模型版本更新。
 
@@ -291,7 +291,7 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ws-ping-interval 20 --ws
 
 ## 8. 项目进度追踪
 
-> 最后更新时间：2026-04-22
+> 最后更新时间：2026-04-27
 
 ### 已完成
 
@@ -300,20 +300,20 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ws-ping-interval 20 --ws
 - [x] 全局配置管理（`config.py`，环境变量驱动，代码内默认值，无配置文件依赖）
 - [x] JSON 结构化日志 + trace_id 上下文注入（`logging.py`）
 - [x] 请求/响应 Pydantic 数据模型（`schemas.py`，对齐 §3 接口协议）
-- [x] 流式 VAD 断句服务（`vad_service.py`，动态停顿阈值 + 强制触发）
-- [x] VAD 连接级实例（`vad_service.py`，每连接独立 `StreamingVADSession`，无需多进程池）
+- [x] 流式 VAD 断句服务（`vad_service.py`，Silero VAD 动态批处理 + 动态停顿阈值 + 强制触发）
+- [x] VAD 全局批处理器（`vad_service.py`，`SileroVADBatchProcessor` 单例 + 外部状态管理 + asyncio 凑批推理）
 - [x] 异步 ASR 推理服务（`asr_service.py`，httpx → vLLM OpenAI 兼容接口）
 - [x] ITN 多进程池（`itn_pool.py`，8 实例 spawn 模式 + Pool 内部负载均衡 + Queue 结果回传 + eager init 预热）
 - [x] WebSocket 全链路处理（`websocket.py`，握手→音频→断句→推理→推送）
 - [x] 并发连接管理（`connection_manager.py`，Semaphore + 1013 拒绝）
-- [x] 会话状态机（`session.py`，sid 生成、seg_id 递增；每 Session 持有独立 VAD 实例）
+- [x] 会话状态机（`session.py`，sid 生成、seg_id 递增；每 Session 注册至 VAD 批处理器，close() 时注销）
 - [x] 健康探针与 Prometheus 指标暴露（`health.py`、`metrics.py`）
-- [x] 虚拟环境与依赖安装（含 WeTextProcessing），本地启动验证通过
+- [x] 虚拟环境与依赖安装（含 WeTextProcessing + PyTorch），本地启动验证通过
 
 ### 待完成
 
 - [ ] **[P0]** 端到端联调：连接远程 vLLM ASR，跑通完整管线
-- [ ] **[P0]** VAD 流式断句验证：用真实音频验证断句准确性与时间戳
+- [ ] **[P0]** VAD 流式断句验证：用真实音频验证 Silero VAD 断句准确性与时间戳
 - [x] **[P1]** WebSocket 测试客户端脚本与并发压测脚本 (`ws_stress_test.py` / `client.java`)
 - [ ] **[P1]** docker-compose.yaml：vLLM-Ascend 容器编排 + 环境变量注入
 - [ ] **[P1]** Dockerfile：镜像打包（代码+依赖），权重 Volume 挂载

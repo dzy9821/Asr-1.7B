@@ -37,6 +37,7 @@ from src.models.schemas import (
 )
 from src.services.asr_service import ASRService, build_hotword_context
 from src.services.itn_pool import ITNPool
+from src.services.vad_service import vad_processor
 from src.utils.audio import decode_base64_pcm, samples_to_cs, samples_to_ms
 
 logger = get_logger(__name__)
@@ -106,6 +107,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         await _wait_for_client_disconnect_safely(websocket, session)
     finally:
         if session:
+            session.close()  # 从 VAD 批处理器注销
             connection_manager.unregister(session.sid)
             connection_slot_released = True
             asr_connections_current.dec()
@@ -169,8 +171,8 @@ async def _handle_audio_frame(
     # Base64 解码
     pcm_int16 = decode_base64_pcm(msg.payload.audio.audio)
 
-    # 喂入 VAD（连接级实例，同步调用）
-    segments = session.vad.feed_audio(pcm_int16)
+    # 喂入 VAD（通过全局批处理器异步推理）
+    segments = await session.vad.feed_audio(pcm_int16)
 
     # 对每个触发的语音段执行 ASR + ITN
     for seg in segments:

@@ -30,7 +30,7 @@
 
 ### 4. 服务管线层 (`src/services/`)
 该模块将底层的算法模型包装成了适合在异步高并发 Web 服务中运行的组件。
-*   **`vad_service.py`**: 流式语音活动检测服务。封装底层 TenVAD C 运行时，每个 WebSocket 连接在握手时创建独立的 `StreamingVADSession` 实例，连接关闭时自动销毁。内置**动态停顿阈值策略**，在识别准确度和延迟间取得平衡。TenVad 维护内部时序状态，经实验验证无法共享（详见 `vad.md`）。
+*   **`vad_service.py`**: 流式语音活动检测服务。采用 Silero VAD **全局单实例动态批处理架构**：`SileroVADBatchProcessor` 全局单例加载 JIT 模型，每个连接的时序状态（RNN context + hidden state）在服务端外部管理。后台 asyncio Task 从队列中收集帧请求并凑批推理，分发结果。每个连接持有独立的 `StreamingVADSession` 实例，负责帧缓冲与**动态停顿阈值策略**，在识别准确度和延迟间取得平衡。经压测验证，单实例可在实时约束内服务 500+ 路并发。
 *   **`asr_service.py`**: 异步语音识别服务。利用 `httpx.AsyncClient` 将音频异步提交给 vLLM。内置 HTTP 异常重试恢复机制（最多 3 次），并将音频 Base64 编码等 CPU 操作移至线程池执行，避免阻塞主事件循环（防止 Pong 超时）。
 *   **`itn_pool.py` / `itn_service.py`**: 文本逆正则化服务。由于 ITN 是纯 CPU 密集型任务，系统将其置于独立的多进程池（默认8实例）中处理，使用 `multiprocessing.Queue` 传递数据，确保异步主线程不被阻塞。
 *   **`utils/audio.py`**: 音频数据处理的纯函数工具箱。主要负责将客户端发来的 Base64 编码数据解码为 `numpy` 的 int16 数组格式，以及进行时间维度换算。
@@ -39,7 +39,7 @@
 
 ### 6. 底层模型依赖 (`models/`)
 *(该部分通常复用现有的算法工程结构)*
-*   **`vad/`**: 底层基于 C/C++ 编译的 TenVAD 运行时及其 Python wrapper（如 `ten_vad_wrapper.py`）。
+*   **`vad/`**: Silero VAD 模型文件（JIT 格式），通过 `torch.hub.load(source='local')` 加载。支持批处理推理。
 *   **`itn/`**: 基于 WeTextProcessing 的中文逆文本正则化逻辑与 FST 模型。
 
 ---
@@ -53,8 +53,8 @@
 | **架构设计** | 完成系统架构文档 `asr.md`，含接口协议、动态断句规则、环境变量、三段式处理流程示例 |
 | **基础设施** | `config.py`（环境变量配置）、`logging.py`（JSON 结构化日志 + trace_id） |
 | **数据模型** | `schemas.py`（Pydantic 请求/响应模型，严格对齐设计文档 §3 协议） |
-| **服务层** | `vad_service.py`（VAD连接级实例）、`asr_service.py`（异步及重试）、`itn_pool.py`（ITN多进程池） |
-| **API 层** | `websocket.py`（全链路，避免阻塞心跳）、`connection_manager.py`（并发与延迟关闭）、`session.py` |
+| **服务层** | `vad_service.py`（Silero VAD 全局批处理器 + 动态断句）、`asr_service.py`（异步及重试）、`itn_pool.py`（ITN多进程池） |
+| **API 层** | `websocket.py`（全链路，避免阻塞心跳）、`connection_manager.py`（并发与延迟关闭）、`session.py`（VAD 注册/注销） |
 | **运维** | `health.py`（探针）、`metrics.py`（指标）、多并发压力测试脚本（`ws_stress_test.py`）|
 | **依赖** | 虚拟环境搭建 + 全部依赖安装（含 WeTextProcessing），服务本地启动验证通过 |
 | **高可用** | asr_service 增加 HTTP 断连重试机制，并移出阻塞操作以保障 WebSocket 心跳响应 |

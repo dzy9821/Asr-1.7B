@@ -11,7 +11,7 @@ from fastapi import FastAPI
 
 from src.api.health import router as health_router
 from src.api.metrics import router as metrics_router
-from src.api.websocket import asr_service, itn_pool, router as ws_router
+from src.api.websocket import asr_service, itn_pool, vad_processor, router as ws_router
 from src.core.config import settings
 from src.core.logging import get_logger, setup_logging
 
@@ -30,6 +30,11 @@ async def lifespan(app: FastAPI):
         settings.MAX_CONNECTIONS,
     )
 
+    # Silero VAD 批处理器（eager init + 启动后台循环）
+    vad_processor.load_model()
+    await vad_processor.start()
+    logger.info("Silero VAD batch processor ready")
+
     # ITN 多进程池（eager init）
     itn_pool.start()
     logger.info("ITN pool ready: %d workers", itn_pool.num_workers)
@@ -44,6 +49,7 @@ async def lifespan(app: FastAPI):
     # ---- 关闭 ----
     logger.info("Shutting down ASR service...")
     await asr_service.shutdown()
+    await vad_processor.stop()
     itn_pool.shutdown()
     logger.info("Shutdown complete")
 

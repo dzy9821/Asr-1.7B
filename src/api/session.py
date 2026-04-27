@@ -32,7 +32,7 @@ class ASRSession:
 
     维护段序号、时间偏移、热词等。
     每个 Session 持有独立的 StreamingVADSession 实例，连接创建时初始化，
-    连接关闭时随 Session 对象销毁。
+    连接关闭时通过 close() 方法显式注销。
     """
 
     def __init__(self, trace_id: str, biz_id: str, app_id: str = "") -> None:
@@ -48,8 +48,12 @@ class ASRSession:
         # 热词上下文（默认从环境变量 HOTWORDS 读取，客户端可追加）
         self.hotword_context: str = build_hotword_context(settings.HOTWORDS)
 
-        # 每连接独立的 VAD 实例
-        self.vad: StreamingVADSession = StreamingVADSession()
+        # 每连接独立的 VAD 会话（注册至全局批处理器）
+        self.vad: StreamingVADSession = StreamingVADSession(sid=self.sid)
+
+    def close(self) -> None:
+        """释放 VAD 资源（从全局批处理器注销）。"""
+        self.vad.close()
 
     def next_seg_id(self) -> int:
         """获取当前段号并递增。"""
