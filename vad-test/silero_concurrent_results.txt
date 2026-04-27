@@ -1,0 +1,192 @@
+Silero VAD 测试结果
+测试音频: /home/ubuntu/project/vad-test/120报警电话16k.wav
+音频时长: 81.20 秒
+
+=== 并发流数量 (Batch Size): 1 ===
+处理耗时: 2.0493 秒
+RTF (实时率，每路): 0.0252
+分段数量: 41
+分段时间戳 (采样点):
+  - start: 42528, end: 64480
+  - start: 75296, end: 94176
+  - start: 97312, end: 114144
+  - start: 116768, end: 135136
+  - start: 140832, end: 157152
+  - start: 169504, end: 189408
+  - start: 194080, end: 208864
+  - start: 216608, end: 241632
+  - start: 244256, end: 270816
+  - start: 277536, end: 314336
+  - start: 316960, end: 329184
+  - start: 340000, end: 377312
+  - start: 381472, end: 399840
+  - start: 405024, end: 416736
+  - start: 420384, end: 433632
+  - start: 438304, end: 453088
+  - start: 457760, end: 476128
+  - start: 485920, end: 512480
+  - start: 518688, end: 533984
+  - start: 543776, end: 566240
+  - start: 580128, end: 612320
+  - start: 617504, end: 637920
+  - start: 641056, end: 665056
+  - start: 668192, end: 681440
+  - start: 691744, end: 724448
+  - start: 728608, end: 749024
+  - start: 764960, end: 796640
+  - start: 801824, end: 835552
+  - start: 839712, end: 860128
+  - start: 870944, end: 886752
+  - start: 895520, end: 934368
+  - start: 939552, end: 948192
+  - start: 952352, end: 969184
+  - start: 972320, end: 997344
+  - start: 1002528, end: 1031136
+  - start: 1039904, end: 1068000
+  - start: 1073696, end: 1101280
+  - start: 1109536, end: 1125344
+  - start: 1128992, end: 1149920
+  - start: 1157152, end: 1184224
+  - start: 1185824, end: 1210848
+
+=== 并发流数量 (Batch Size): 20 ===
+处理耗时: 5.6896 秒
+RTF (实时率，每路): 0.0035
+分段数量: 41
+分段时间戳 (采样点):
+  - start: 42528, end: 64480
+  - start: 75296, end: 94176
+  - start: 97312, end: 114144
+  - start: 116768, end: 135136
+  - start: 140832, end: 157152
+  - start: 169504, end: 189408
+  - start: 194080, end: 208864
+  - start: 216608, end: 241632
+  - start: 244256, end: 270816
+  - start: 277536, end: 314336
+  - start: 316960, end: 329184
+  - start: 340000, end: 377312
+  - start: 381472, end: 399840
+  - start: 405024, end: 416736
+  - start: 420384, end: 433632
+  - start: 438304, end: 453088
+  - start: 457760, end: 476128
+  - start: 485920, end: 512480
+  - start: 518688, end: 533984
+  - start: 543776, end: 566240
+  - start: 580128, end: 612320
+  - start: 617504, end: 637920
+  - start: 641056, end: 665056
+  - start: 668192, end: 681440
+  - start: 691744, end: 724448
+  - start: 728608, end: 749024
+  - start: 764960, end: 796640
+  - start: 801824, end: 835552
+  - start: 839712, end: 860128
+  - start: 870944, end: 886752
+  - start: 895520, end: 934368
+  - start: 939552, end: 948192
+  - start: 952352, end: 969184
+  - start: 972320, end: 997344
+  - start: 1002528, end: 1031136
+  - start: 1039904, end: 1068000
+  - start: 1073696, end: 1101280
+  - start: 1109536, end: 1125344
+  - start: 1128992, end: 1149920
+  - start: 1157152, end: 1184224
+  - start: 1185824, end: 1210848
+
+=== 并发流数量 (Batch Size): 50 ===
+处理耗时: 8.8534 秒
+RTF (实时率，每路): 0.0022
+分段数量: 41
+分段时间戳 (采样点):
+  - start: 42528, end: 64480
+  - start: 75296, end: 94176
+  - start: 97312, end: 114144
+  - start: 116768, end: 135136
+  - start: 140832, end: 157152
+  - start: 169504, end: 189408
+  - start: 194080, end: 208864
+  - start: 216608, end: 241632
+  - start: 244256, end: 270816
+  - start: 277536, end: 314336
+  - start: 316960, end: 329184
+  - start: 340000, end: 377312
+  - start: 381472, end: 399840
+  - start: 405024, end: 416736
+  - start: 420384, end: 433632
+  - start: 438304, end: 453088
+  - start: 457760, end: 476128
+  - start: 485920, end: 512480
+  - start: 518688, end: 533984
+  - start: 543776, end: 566240
+  - start: 580128, end: 612320
+  - start: 617504, end: 637920
+  - start: 641056, end: 665056
+  - start: 668192, end: 681440
+  - start: 691744, end: 724448
+  - start: 728608, end: 749024
+  - start: 764960, end: 796640
+  - start: 801824, end: 835552
+  - start: 839712, end: 860128
+  - start: 870944, end: 886752
+  - start: 895520, end: 934368
+  - start: 939552, end: 948192
+  - start: 952352, end: 969184
+  - start: 972320, end: 997344
+  - start: 1002528, end: 1031136
+  - start: 1039904, end: 1068000
+  - start: 1073696, end: 1101280
+  - start: 1109536, end: 1125344
+  - start: 1128992, end: 1149920
+  - start: 1157152, end: 1184224
+  - start: 1185824, end: 1210848
+
+=== 并发流数量 (Batch Size): 100 ===
+处理耗时: 14.4937 秒
+RTF (实时率，每路): 0.0018
+分段数量: 41
+分段时间戳 (采样点):
+  - start: 42528, end: 64480
+  - start: 75296, end: 94176
+  - start: 97312, end: 114144
+  - start: 116768, end: 135136
+  - start: 140832, end: 157152
+  - start: 169504, end: 189408
+  - start: 194080, end: 208864
+  - start: 216608, end: 241632
+  - start: 244256, end: 270816
+  - start: 277536, end: 314336
+  - start: 316960, end: 329184
+  - start: 340000, end: 377312
+  - start: 381472, end: 399840
+  - start: 405024, end: 416736
+  - start: 420384, end: 433632
+  - start: 438304, end: 453088
+  - start: 457760, end: 476128
+  - start: 485920, end: 512480
+  - start: 518688, end: 533984
+  - start: 543776, end: 566240
+  - start: 580128, end: 612320
+  - start: 617504, end: 637920
+  - start: 641056, end: 665056
+  - start: 668192, end: 681440
+  - start: 691744, end: 724448
+  - start: 728608, end: 749024
+  - start: 764960, end: 796640
+  - start: 801824, end: 835552
+  - start: 839712, end: 860128
+  - start: 870944, end: 886752
+  - start: 895520, end: 934368
+  - start: 939552, end: 948192
+  - start: 952352, end: 969184
+  - start: 972320, end: 997344
+  - start: 1002528, end: 1031136
+  - start: 1039904, end: 1068000
+  - start: 1073696, end: 1101280
+  - start: 1109536, end: 1125344
+  - start: 1128992, end: 1149920
+  - start: 1157152, end: 1184224
+  - start: 1185824, end: 1210848
+
