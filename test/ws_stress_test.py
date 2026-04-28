@@ -13,7 +13,15 @@ WebSocket ASR 并发压力测试客户端。
 额外能力：
   - 详细的统计日志（每连接、全局汇总）
   - 异常分类计数
+  - 服务端 ASR 耗时解析与统计
   - 输出格式方便粘贴给 AI 分析 bug
+
+VAD 分段策略（动态停顿阈值）：
+  - 0~20s 语音：停顿阈值从 2.0s 线性递减至 0.5s
+  - 20~30s 语音：固定 0.5s 停顿阈值
+  - >30s 语音：强制触发分段
+  - <0.5s 短音频：抑制不转发
+  分片数量取决于音频内容，不再是固定值。
 
 用法：
     python test/ws_stress_test.py --url ws://localhost:8000/tuling/asr/v3 \
@@ -55,6 +63,13 @@ class SegmentResult:
     text: str = ""
     status: int = 0          # header.status
     recv_time: float = 0.0   # monotonic timestamp
+    asr_ms: float = 0.0      # 服务端 ASR 模型推理耗时(ms)
+    total_ms: float = 0.0    # 服务端总处理耗时(ms) ASR+ITN
+
+    @property
+    def audio_duration_ms(self) -> float:
+        """音频段时长（毫秒）。"""
+        return max(0, self.ed_ms - self.bg_ms)
 
 
 @dataclass
@@ -219,6 +234,18 @@ async def run_single_connection(
                                 return
                             continue
 
+                        # 解析服务端耗时信息
+                        asr_ms = 0.0
+                        total_ms = 0.0
+                        msg_field = header.get("message", "")
+                        if msg_field and msg_field.startswith("{"):
+                            try:
+                                timing = json.loads(msg_field)
+                                asr_ms = timing.get("asr_ms", 0.0)
+                                total_ms = timing.get("total_ms", 0.0)
+                            except (json.JSONDecodeError, TypeError):
+                                pass
+
                         seg = SegmentResult(
                             seg_id=res.get("segId", -1),
                             bg_ms=res.get("bg", 0),
@@ -226,6 +253,8 @@ async def run_single_connection(
                             text=_extract_text(res),
                             status=header.get("status", -1),
                             recv_time=t_recv,
+                            asr_ms=asr_ms,
+                            total_ms=total_ms,
                         )
                         result.segments.append(seg)
 
@@ -390,10 +419,21 @@ async def run_stress_test(
 
 
 # ============================================================
-# 报告生成
+# 统计工具
 # ============================================================
 
-EXPECTED_SEGMENTS = 7  # 6 from feed + 1 final (status=2 with flush/empty)
+def _percentile(sorted_list: list[float], p: float) -> float:
+    """计算百分位数（输入须已排序）。"""
+    if not sorted_list:
+        return 0.0
+    idx = int(len(sorted_list) * p / 100.0)
+    idx = min(idx, len(sorted_list) - 1)
+    return sorted_list[idx]
+
+
+# ============================================================
+# 报告生成
+# ============================================================
 
 def generate_report(
     results: list[ConnectionResult],
@@ -411,7 +451,7 @@ def generate_report(
     L(f"服务地址:       {url}")
     L(f"并发数:         {concurrency}")
     L(f"音频时长:       {audio_duration:.2f}s")
-    L(f"预期分片数(VAD): 6 (feed) + 1 (flush/结束) = 7")
+    L(f"VAD 分段策略:   动态停顿阈值 (2.0s→0.5s 线性递减, 30s 强制触发)")
     L("")
 
     # ---- 总体统计 ----
@@ -437,7 +477,7 @@ def generate_report(
                 L(f"    ... 还有 {len(conns)-3} 个")
         L("")
 
-    # ---- 分片统计（核心诊断数据） ----
+    # ---- 分片统计 ----
     if success:
         L(f"--- 分片统计 (成功连接) ---")
         seg_counts = [r.total_segments for r in success]
@@ -449,20 +489,6 @@ def generate_report(
         for count in sorted(seg_dist.keys()):
             bar = "█" * seg_dist[count]
             L(f"    {count:2d} 个分片: {seg_dist[count]:3d} 个连接  {bar}")
-
-        # 异常分片详情
-        abnormal = [r for r in success if r.total_segments != EXPECTED_SEGMENTS]
-        if abnormal:
-            L(f"")
-            L(f"  ⚠ 分片数异常的连接 (预期 {EXPECTED_SEGMENTS}):")
-            for r in abnormal[:10]:
-                L(f"    conn#{r.conn_id} (sid={r.sid}): 收到 {r.total_segments} 个分片")
-                for seg in r.segments:
-                    dur = f"bg={seg.bg_ms}ms ed={seg.ed_ms}ms"
-                    empty = " ⚠EMPTY" if seg.bg_ms == 0 and seg.ed_ms == 0 and seg.status != 0 else ""
-                    L(f"      seg#{seg.seg_id}: {dur} status={seg.status} text={seg.text!r}{empty}")
-            if len(abnormal) > 10:
-                L(f"    ... 还有 {len(abnormal)-10} 个异常连接")
 
         # 0-0 空分片统计
         zero_dur_conns = [r for r in success if r.zero_duration_segments]
@@ -506,6 +532,39 @@ def generate_report(
               f"max={e2e_lats[-1]:.1f}s")
         L("")
 
+    # ---- ASR 服务端耗时统计 ----
+    if success:
+        all_asr_ms = []
+        all_total_ms = []
+        for r in success:
+            for seg in r.segments:
+                if seg.asr_ms > 0:
+                    all_asr_ms.append(seg.asr_ms)
+                if seg.total_ms > 0:
+                    all_total_ms.append(seg.total_ms)
+
+        if all_asr_ms:
+            L(f"--- 服务端 ASR 模型耗时统计 ({len(all_asr_ms)} 个分段) ---")
+            all_asr_ms.sort()
+            avg_asr = sum(all_asr_ms) / len(all_asr_ms)
+            L(f"  min={all_asr_ms[0]:.1f}ms  avg={avg_asr:.1f}ms  "
+              f"med={_percentile(all_asr_ms, 50):.1f}ms  "
+              f"P95={_percentile(all_asr_ms, 95):.1f}ms  "
+              f"P99={_percentile(all_asr_ms, 99):.1f}ms  "
+              f"max={all_asr_ms[-1]:.1f}ms")
+            L("")
+
+        if all_total_ms:
+            L(f"--- 服务端总处理耗时统计 ({len(all_total_ms)} 个分段, ASR+ITN) ---")
+            all_total_ms.sort()
+            avg_total = sum(all_total_ms) / len(all_total_ms)
+            L(f"  min={all_total_ms[0]:.1f}ms  avg={avg_total:.1f}ms  "
+              f"med={_percentile(all_total_ms, 50):.1f}ms  "
+              f"P95={_percentile(all_total_ms, 95):.1f}ms  "
+              f"P99={_percentile(all_total_ms, 99):.1f}ms  "
+              f"max={all_total_ms[-1]:.1f}ms")
+            L("")
+
     # ---- 服务端错误消息 ----
     srv_err_conns = [r for r in results if r.server_errors]
     if srv_err_conns:
@@ -536,9 +595,12 @@ def generate_report(
         if r.segments:
             for seg in r.segments:
                 dur = f"bg={seg.bg_ms}ms ed={seg.ed_ms}ms"
+                timing = ""
+                if seg.asr_ms > 0:
+                    timing = f" asr={seg.asr_ms:.0f}ms total={seg.total_ms:.0f}ms"
                 empty = " ⚠EMPTY" if seg.bg_ms == 0 and seg.ed_ms == 0 and seg.status != 0 else ""
                 L(f"      seg#{seg.seg_id}: {dur} status={seg.status} "
-                  f"text={seg.text!r}{empty}")
+                  f"text={seg.text!r}{timing}{empty}")
     L("")
     L("=" * 80)
     L("报告结束")

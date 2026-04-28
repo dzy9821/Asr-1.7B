@@ -6,6 +6,9 @@ WebSocket 端点 /tuling/asr/v3 —— 核心处理逻辑。
   2. status=0 → 校验 → 初始化会话 → 回复握手成功
   3. status=1 → 解码音频 → VAD → 若触发断句 → ASR → ITN → 推送结果
   4. status=2 → 刷空缓冲区 → 推送终态结果 → 断开
+
+每个 segment 响应的 header.message 包含 JSON 格式的耗时信息：
+  {"asr_ms": 123.4, "total_ms": 145.6}
 """
 
 from __future__ import annotations
@@ -224,6 +227,8 @@ async def _process_segment(
     is_final: bool = False,
 ) -> None:
     """对一个语音段执行 ASR → ITN → 推送结果。"""
+    import json as _json
+
     t0 = time.monotonic()
     seg_id = session.next_seg_id()
 
@@ -232,15 +237,20 @@ async def _process_segment(
     end_sample = seg["end_sample"]
 
     try:
-        # ASR 推理
+        # ASR 推理（单独计时）
+        t_asr_start = time.monotonic()
         raw_text = await asr_service.recognize(
             audio_int16,
             sr=16000,
             context=session.hotword_context,
         )
+        t_asr_end = time.monotonic()
+        asr_ms = (t_asr_end - t_asr_start) * 1000
 
         # ITN 后处理（通过多进程池）
         final_text = await itn_pool.normalize(raw_text)
+
+        total_ms = (time.monotonic() - t0) * 1000
 
         # 构建结果并推送
         bg_ms = samples_to_ms(start_sample)
@@ -269,10 +279,17 @@ async def _process_segment(
         )
 
         resp_status = 2 if is_final else 1
+
+        # 在 header.message 中附带耗时 JSON，客户端可解析
+        timing_msg = _json.dumps({
+            "asr_ms": round(asr_ms, 1),
+            "total_ms": round(total_ms, 1),
+        })
+
         response = ServerMessage(
             header=ResponseHeader(
                 code=0,
-                message="success",
+                message=timing_msg,
                 sid=session.sid,
                 traceId=session.trace_id,
                 status=resp_status,
@@ -282,15 +299,15 @@ async def _process_segment(
 
         await websocket.send_text(response.model_dump_json())
 
-        elapsed_ms = (time.monotonic() - t0) * 1000
-        asr_processing_latency_ms.observe(elapsed_ms)
+        asr_processing_latency_ms.observe(total_ms)
         asr_segments_total.inc()
 
         logger.info(
-            "Segment processed: seg_id=%d, text=%s, latency=%.0fms",
+            "Segment processed: seg_id=%d, text=%s, asr=%.0fms, total=%.0fms",
             seg_id,
             final_text,
-            elapsed_ms,
+            asr_ms,
+            total_ms,
         )
 
     except (WebSocketDisconnect, ClientDisconnected):

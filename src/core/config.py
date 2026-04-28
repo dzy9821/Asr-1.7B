@@ -13,8 +13,8 @@ class Settings:
     WS_PORT: int = int(os.getenv("WS_PORT", "8000"))
     MAX_CONNECTIONS: int = int(os.getenv("MAX_CONNECTIONS", "64"))
     HANDSHAKE_TIMEOUT: int = int(os.getenv("HANDSHAKE_TIMEOUT", "5"))
-    WS_PING_INTERVAL: float = float(os.getenv("WS_PING_INTERVAL", "20"))
-    WS_PING_TIMEOUT: float = float(os.getenv("WS_PING_TIMEOUT", "300"))
+    WS_PING_INTERVAL: float = float(os.getenv("WS_PING_INTERVAL", "5"))
+    WS_PING_TIMEOUT: float = float(os.getenv("WS_PING_TIMEOUT", "20"))
 
     # ---- ITN 多进程池 ----
     ITN_WORKERS: int = int(os.getenv("ITN_WORKERS", "8"))
@@ -37,7 +37,7 @@ class Settings:
     )
 
     # ---- VAD 动态断句阈值 ----
-    VAD_PAUSE_MAX: float = float(os.getenv("VAD_PAUSE_MAX", "2.0"))
+    VAD_PAUSE_MAX: float = float(os.getenv("VAD_PAUSE_MAX", "1.0"))
     """累积语音 0s 时所需停顿（秒）。"""
     VAD_PAUSE_MIN: float = float(os.getenv("VAD_PAUSE_MIN", "0.5"))
     """累积语音 >= DYNAMIC_RANGE_END 时所需停顿（秒）。"""
