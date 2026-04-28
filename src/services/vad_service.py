@@ -18,17 +18,18 @@ from typing import Optional
 import numpy as np
 import torch
 
+from src.core.config import settings
 from src.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-# ---- 动态阈值参数（与设计文档一致） ----
-T_MAX = 2.0   # 累积语音 0s 时所需停顿（秒）
-T_MIN = 0.5   # 累积语音 >= DYNAMIC_RANGE_END 时所需停顿（秒）
-DYNAMIC_RANGE_END = 20.0   # 动态线性区间终点（秒）
-K = (T_MAX - T_MIN) / DYNAMIC_RANGE_END  # 停顿阈值递减斜率 = 0.075
-MIN_SPEECH_DURATION = 0.5   # 短音频抑制门限（秒），不足则不转发
-MAX_SPEECH_DURATION = 30.0  # 长音频强制触发门限（秒），立即转发
+# ---- 动态阈值参数（从环境变量读取，可随时调整） ----
+T_MAX = settings.VAD_PAUSE_MAX                # 累积语音 0s 时所需停顿（秒）
+T_MIN = settings.VAD_PAUSE_MIN                # 累积语音 >= DYNAMIC_RANGE_END 时所需停顿（秒）
+DYNAMIC_RANGE_END = settings.VAD_DYNAMIC_RANGE_END  # 动态线性区间终点（秒）
+K = (T_MAX - T_MIN) / DYNAMIC_RANGE_END if DYNAMIC_RANGE_END > 0 else 0.0  # 停顿阈值递减斜率
+MIN_SPEECH_DURATION = settings.VAD_MIN_SPEECH  # 短音频抑制门限（秒），不足则不转发
+MAX_SPEECH_DURATION = settings.VAD_MAX_SPEECH  # 长音频强制触发门限（秒），立即转发
 
 # ---- Silero VAD 常量 ----
 SILERO_WINDOW_SIZE = 512   # 16kHz 下每帧 512 samples = 32ms

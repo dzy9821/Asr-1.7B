@@ -36,6 +36,18 @@ class Settings:
         os.getenv("MP_QUEUE_LOG_INTERVAL_SEC", "10")
     )
 
+    # ---- VAD 动态断句阈值 ----
+    VAD_PAUSE_MAX: float = float(os.getenv("VAD_PAUSE_MAX", "2.0"))
+    """累积语音 0s 时所需停顿（秒）。"""
+    VAD_PAUSE_MIN: float = float(os.getenv("VAD_PAUSE_MIN", "0.5"))
+    """累积语音 >= DYNAMIC_RANGE_END 时所需停顿（秒）。"""
+    VAD_DYNAMIC_RANGE_END: float = float(os.getenv("VAD_DYNAMIC_RANGE_END", "20.0"))
+    """动态线性区间终点（秒），超过此值使用 VAD_PAUSE_MIN。"""
+    VAD_MIN_SPEECH: float = float(os.getenv("VAD_MIN_SPEECH", "0.5"))
+    """短音频抑制门限（秒），不足则不转发。"""
+    VAD_MAX_SPEECH: float = float(os.getenv("VAD_MAX_SPEECH", "30.0"))
+    """长音频强制触发门限（秒），立即转发。"""
+
 
 # 全局单例
 settings = Settings()
