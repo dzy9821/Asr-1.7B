@@ -17,9 +17,9 @@ WebSocket ASR 并发压力测试客户端。
   - 输出格式方便粘贴给 AI 分析 bug
 
 VAD 分段策略（动态停顿阈值）：
-  - 0~20s 语音：停顿阈值从 2.0s 线性递减至 0.5s
-  - 20~30s 语音：固定 0.5s 停顿阈值
-  - >30s 语音：强制触发分段
+  - 0~20s 语音：停顿阈值从 VAD_PAUSE_MAX 线性递减至 VAD_PAUSE_MIN
+  - 20~30s 语音：固定 VAD_PAUSE_MIN 停顿阈值
+  - >30s 语音：到达 VAD_MAX_SPEECH 强制触发分段
   - <0.5s 短音频：抑制不转发
   分片数量取决于音频内容，不再是固定值。
 
@@ -49,6 +49,9 @@ from websockets.exceptions import (
     ConnectionClosedError,
     ConnectionClosedOK,
 )
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from src.core.config import settings
 
 # ============================================================
 # 数据结构
@@ -173,8 +176,8 @@ async def run_single_connection(
         ws = await asyncio.wait_for(
             websockets.connect(
                 url,
-                ping_interval=20,
-                ping_timeout=60,
+                ping_interval=settings.WS_PING_INTERVAL,
+                ping_timeout=settings.WS_PING_TIMEOUT,
                 close_timeout=10,
                 max_size=10 * 1024 * 1024,
             ),
@@ -451,7 +454,7 @@ def generate_report(
     L(f"服务地址:       {url}")
     L(f"并发数:         {concurrency}")
     L(f"音频时长:       {audio_duration:.2f}s")
-    L(f"VAD 分段策略:   动态停顿阈值 (2.0s→0.5s 线性递减, 30s 强制触发)")
+    L(f"VAD 分段策略:   动态停顿阈值 ({settings.VAD_PAUSE_MAX}s→{settings.VAD_PAUSE_MIN}s 线性递减, {settings.VAD_MAX_SPEECH}s 强制触发)")
     L("")
 
     # ---- 总体统计 ----

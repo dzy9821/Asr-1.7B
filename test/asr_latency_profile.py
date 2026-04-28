@@ -38,6 +38,9 @@ from typing import Optional
 import websockets
 from websockets.exceptions import ConnectionClosed
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from src.core.config import settings
+
 # ============================================================
 # 默认并发级别
 # ============================================================
@@ -139,8 +142,8 @@ async def _run_connection(
         ws = await asyncio.wait_for(
             websockets.connect(
                 url,
-                ping_interval=20,
-                ping_timeout=120,
+                ping_interval=settings.WS_PING_INTERVAL,
+                ping_timeout=settings.WS_PING_TIMEOUT,
                 close_timeout=10,
                 max_size=10 * 1024 * 1024,
             ),
@@ -409,7 +412,7 @@ def generate_full_report(
     L(f"测试音频:     {audio_path}")
     L(f"音频时长:     {audio_duration:.2f}s")
     L(f"并发级别:     {', '.join(str(lr.concurrency) for lr in level_results)}")
-    L(f"VAD 分段策略: 动态停顿阈值 (2.0s→0.5s 线性递减, 30s 强制触发)")
+    L(f"VAD 分段策略: 动态停顿阈值 ({settings.VAD_PAUSE_MAX}s→{settings.VAD_PAUSE_MIN}s 线性递减, {settings.VAD_MAX_SPEECH}s 强制触发)")
     L("")
 
     # ============================================================
