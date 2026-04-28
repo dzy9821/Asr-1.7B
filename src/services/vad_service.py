@@ -54,8 +54,8 @@ class SileroVADBatchProcessor:
 
     def __init__(
         self,
-        max_batch_size: int = 64,
-        max_wait_ms: float = 5.0,
+        max_batch_size: int = 256,
+        max_wait_ms: float = 10.0,
     ):
         self._max_batch_size = max_batch_size
         self._max_wait_ms = max_wait_ms
