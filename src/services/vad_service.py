@@ -23,11 +23,12 @@ from src.core.logging import get_logger
 logger = get_logger(__name__)
 
 # ---- 动态阈值参数（与设计文档一致） ----
-T_MAX = 2.0   # 语音极短时最长等待停顿（秒）
-T_MIN = 0.3   # 语音极长时最短等待停顿（秒）
-K = 0.17      # 停顿阈值递减斜率（秒/秒）
-MIN_SPEECH_DURATION = 0.5   # 短音频抑制门限（秒）
-MAX_SPEECH_DURATION = 15.0  # 长音频强制触发门限（秒）
+T_MAX = 2.0   # 累积语音 0s 时所需停顿（秒）
+T_MIN = 0.5   # 累积语音 >= DYNAMIC_RANGE_END 时所需停顿（秒）
+DYNAMIC_RANGE_END = 20.0   # 动态线性区间终点（秒）
+K = (T_MAX - T_MIN) / DYNAMIC_RANGE_END  # 停顿阈值递减斜率 = 0.075
+MIN_SPEECH_DURATION = 0.5   # 短音频抑制门限（秒），不足则不转发
+MAX_SPEECH_DURATION = 30.0  # 长音频强制触发门限（秒），立即转发
 
 # ---- Silero VAD 常量 ----
 SILERO_WINDOW_SIZE = 512   # 16kHz 下每帧 512 samples = 32ms
@@ -371,12 +372,22 @@ def _should_transcribe(speech_duration: float, pause_duration: float) -> bool:
     """
     判断是否应触发转写。
 
-    规则：停顿阈值随语音时长线性递减。
+    动态转写触发规则：
+      - speech < 0.5s  → 不触发（短音频抑制）
+      - speech >= 30s  → 立即触发（强制上限）
+      - 0s ~ 20s      → 停顿阈值从 2.0s 线性递减至 0.5s
+      - 20s ~ 30s     → 停顿阈值固定为 0.5s
     """
     if speech_duration < MIN_SPEECH_DURATION:
         return False
-    if speech_duration > MAX_SPEECH_DURATION:
+    if speech_duration >= MAX_SPEECH_DURATION:
         return True
 
-    threshold = max(T_MIN, T_MAX - K * speech_duration)
+    if speech_duration >= DYNAMIC_RANGE_END:
+        # 20~30s 区间：使用最小停顿阈值
+        threshold = T_MIN
+    else:
+        # 0~20s 区间：线性递减
+        threshold = T_MAX - K * speech_duration
+
     return pause_duration >= threshold

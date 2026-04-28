@@ -30,7 +30,7 @@
 
 ### 4. 服务管线层 (`src/services/`)
 该模块将底层的算法模型包装成了适合在异步高并发 Web 服务中运行的组件。
-*   **`vad_service.py`**: 流式语音活动检测服务。采用 Silero VAD **全局单实例动态批处理架构**：`SileroVADBatchProcessor` 全局单例加载 JIT 模型，每个连接的时序状态（RNN context + hidden state）在服务端外部管理。后台 asyncio Task 从队列中收集帧请求并凑批推理，分发结果。每个连接持有独立的 `StreamingVADSession` 实例，负责帧缓冲与**动态停顿阈值策略**，在识别准确度和延迟间取得平衡。经压测验证，单实例可在实时约束内服务 500+ 路并发。
+*   **`vad_service.py`**: 流式语音活动检测服务。采用 Silero VAD **全局单实例动态批处理架构**：`SileroVADBatchProcessor` 全局单例加载 JIT 模型，每个连接的时序状态（RNN context + hidden state）在服务端外部管理。后台 asyncio Task 从队列中收集帧请求并凑批推理，分发结果。每个连接持有独立的 `StreamingVADSession` 实例，负责帧缓冲与**动态停顿阈值策略**：累积语音 0\~20s 区间内停顿阈值从 2.0s 线性递减至 0.5s（斜率 0.075）；20\~30s 区间停顿 0.5s 即触发；≥30s 立即强制转发；语音不足 0.5s 则不转发（短音频抑制）。经压测验证，单实例可在实时约束内服务 500+ 路并发。
 *   **`asr_service.py`**: 异步语音识别服务。利用 `httpx.AsyncClient` 将音频异步提交给 vLLM。内置 HTTP 异常重试恢复机制（最多 3 次），并将音频 Base64 编码等 CPU 操作移至线程池执行，避免阻塞主事件循环（防止 Pong 超时）。
 *   **`itn_pool.py` / `itn_service.py`**: 文本逆正则化服务。由于 ITN 是纯 CPU 密集型任务，系统将其置于独立的多进程池（默认8实例）中处理，使用 `multiprocessing.Queue` 传递数据，确保异步主线程不被阻塞。
 *   **`utils/audio.py`**: 音频数据处理的纯函数工具箱。主要负责将客户端发来的 Base64 编码数据解码为 `numpy` 的 int16 数组格式，以及进行时间维度换算。
