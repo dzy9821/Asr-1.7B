@@ -62,6 +62,21 @@ class ASRSession:
         # 活跃 ASR 后台任务列表
         self._pending_asr_tasks: list[asyncio.Task] = []
 
+        # ---- 结果顺序保证 ----
+        self._next_send_seg_id: int = 0
+        self._result_buffer: dict[int, str] = {}
+
+    async def push_result_in_order(self, websocket, seg_id: int, response_json: str) -> None:
+        """保证按 seg_id 顺序推送结果，解决短句先于长句返回导致的乱序问题。"""
+        async with self._send_lock:
+            self._result_buffer[seg_id] = response_json
+            # 当等待的下一个段号已经准备好时，依次全部发出
+            while self._next_send_seg_id in self._result_buffer:
+                msg = self._result_buffer.pop(self._next_send_seg_id)
+                if msg:  # 空字符串代表该段处理失败，仅推进序号不发送内容
+                    await websocket.send_text(msg)
+                self._next_send_seg_id += 1
+
     @property
     def send_lock(self) -> asyncio.Lock:
         """WebSocket 发送锁，多个并发 ASR 任务共享。"""

@@ -29,7 +29,7 @@
 
 - **异步 I/O**：WebSocket 连接处理使用 `asyncio` 支持高并发长连接。
 - **VAD 动态批处理**：采用 Silero VAD **全局单实例 + 动态批处理** 架构。服务启动时加载一个 Silero JIT 模型（`SileroVADBatchProcessor` 全局单例），每个连接的时序状态（RNN context + hidden state）在服务端外部管理。后台 asyncio Task 从队列中收集多个连接的帧请求，凑批后统一执行一次 batch forward，再将概率结果分发给各连接。经压测验证，单实例 + batch_size=256 可在实时约束内服务 **500 路并发**（RTF < 1.0）。每个连接持有独立的 `StreamingVADSession`，负责帧缓冲与动态阈值断句逻辑。
-- **ASR 异步后台处理**：VAD 触发断句后，ASR+ITN 推理通过 `asyncio.create_task()` 在后台异步执行，**不阻塞**音频帧的持续接收与 VAD 处理。每个连接通过 `asyncio.Lock`（`send_lock`）保证多个并发 ASR 后台任务向 WebSocket 写入结果时不会交错。客户端发送结束帧（status=2）后，服务端会等待所有后台 ASR 任务完成，再发送终态响应。
+- **ASR 异步后台处理**：VAD 触发断句后，ASR+ITN 推理通过 `asyncio.create_task()` 在后台异步执行，**不阻塞**音频帧的持续接收与 VAD 处理。后台任务完成时，将结果放入按 `segId` 排序的**缓冲队列**中，确保长短句并发时**推送顺序绝对递增**，解决乱序问题。最后通过 `asyncio.Lock` 保证并发写入 WebSocket 安全。客户端发送结束帧（status=2）后，服务端会等待所有后台任务完成，再发送终态响应。
 - **ITN 多进程池**：ITN 采用固定 **8 个多进程实例**（`spawn` 模式），请求通过 Pool 内部队列自动负载均衡分发。每个进程预加载 `ITNProcessor` 单例，避免 GIL 限制下的 CPU 密集型 FST 计算瓶颈。结果通过 `Manager().Queue()` 跨进程安全回传。服务启动时 **eager init** 所有进程并预热模型。
 - **vLLM 服务化**：ASR 推理由独立容器内的 vLLM 服务承载，本服务通过 OpenAI 兼容 RESTful API 与其通信，vLLM 进程常驻，无需每次请求重启。
 
@@ -45,7 +45,7 @@
      - **固定停顿阈值（20\~30s）**：累积语音 `>= 20s` 后，停顿 `0.5s` 即触发转发。
 4. **语音识别（异步后台）**：VAD 触发断句后，截取的完整语音片段通过 `asyncio.create_task()` 在**后台异步**发送至 vLLM 服务（OpenAI 兼容接口），由 Qwen3-ASR-1.7B 模型完成转写。**ASR 推理不阻塞音频帧的持续接收**，多个 VAD 分段可以同时进行 ASR 推理。热词通过拼接提示词（Prompt）的方式注入，以提升特定词汇识别准确率。
 5. **文本后处理**：ASR 原始输出经 ITN 模型处理，转换为标准化文本（如数字、符号规范化）。ITN 请求通过 8 实例多进程池自动负载均衡分流。
-6. **结果推送**：后台 ASR 任务完成后，通过 `send_lock` 互斥锁安全地将带时间戳的词语级/句子级结果以 JSON 格式通过 WebSocket 推送给客户端。由于 ASR 是异步的，结果的推送顺序可能与断句顺序不完全一致（短句可能先于长句返回），但每个结果都包含准确的 `segId`、`bg`、`ed` 时间戳，客户端可按需重排序。
+6. **结果推送**：后台 ASR 任务完成后，将结果存入**会话缓冲队列**（`result_buffer`）。服务端会严格按照 `segId` 递增顺序检查队列并推送结果。**这彻底解决了并发带来的乱序问题**，确保客户端收到的文本始终按照真实说话的时间顺序到达，同时通过 `send_lock` 互斥锁安全地进行 WebSocket 写入。
 
 ### 2.3 场景示例：三段式连续语音处理流
 
@@ -312,7 +312,7 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ws-ping-interval 5 --ws-
 - [x] 异步 ASR 推理服务（`asr_service.py`，httpx → vLLM OpenAI 兼容接口）
 - [x] ITN 多进程池（`itn_pool.py`，8 实例 spawn 模式 + Pool 内部负载均衡 + Queue 结果回传 + eager init 预热）
 - [x] WebSocket 全链路处理（`websocket.py`，握手→音频→断句→异步推理→推送）
-- [x] ASR 异步后台处理（`session.py` + `websocket.py`，`asyncio.create_task` + `send_lock` 互斥写入）
+- [x] ASR 异步后台处理与**顺序保证**（`session.py` 缓冲队列 `_result_buffer` 解决长短句并发乱序）
 - [x] 并发连接管理（`connection_manager.py`，Semaphore + 1013 拒绝）
 - [x] 会话状态机（`session.py`，sid 生成、seg_id 递增；每 Session 注册至 VAD 批处理器，close() 时注销）
 - [x] 健康探针与 Prometheus 指标暴露（`health.py`、`metrics.py`）

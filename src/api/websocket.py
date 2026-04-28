@@ -316,9 +316,8 @@ async def _process_segment(
             payload=ResponsePayloadWrapper(result=result),
         )
 
-        # 通过 send_lock 保证多个并发任务的写入互斥
-        async with session.send_lock:
-            await websocket.send_text(response.model_dump_json())
+        # 通过 push_result_in_order 保证结果按 segId 顺序到达客户端
+        await session.push_result_in_order(websocket, seg_id, response.model_dump_json())
 
         asr_processing_latency_ms.observe(total_ms)
         asr_segments_total.inc()
@@ -344,6 +343,8 @@ async def _process_segment(
         logger.exception("Error processing segment %d: %s", seg_id, exc)
         asr_errors_total.labels(error_type="asr_inference").inc()
         try:
+            # 即使处理失败，也必须推送空结果以推进序号，否则后续所有结果将永久卡在缓冲区
+            await session.push_result_in_order(websocket, seg_id, "")
             async with session.send_lock:
                 await _send_error(websocket, session, f"ASR error: {exc}")
         except Exception:
