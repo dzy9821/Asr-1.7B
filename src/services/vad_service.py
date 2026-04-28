@@ -373,11 +373,11 @@ def _should_transcribe(speech_duration: float, pause_duration: float) -> bool:
     """
     判断是否应触发转写。
 
-    动态转写触发规则：
-      - speech < 0.5s  → 不触发（短音频抑制）
-      - speech >= 30s  → 立即触发（强制上限）
-      - 0s ~ 20s      → 停顿阈值从 2.0s 线性递减至 0.5s
-      - 20s ~ 30s     → 停顿阈值固定为 0.5s
+    动态转写触发规则（阈值来自 config.py，可通过环境变量覆盖）：
+      - speech < MIN_SPEECH  → 不触发（短音频抑制）
+      - speech >= MAX_SPEECH → 立即触发（强制上限）
+      - 0s ~ DYNAMIC_RANGE_END → 停顿阈值从 T_MAX 线性递减至 T_MIN
+      - DYNAMIC_RANGE_END ~ MAX_SPEECH → 停顿阈值固定为 T_MIN
     """
     if speech_duration < MIN_SPEECH_DURATION:
         return False

@@ -2,7 +2,7 @@
 
 本项目是一个基于 WebSocket 的高并发、低延迟实时语音转录服务。客户端持续推送音频流，服务端通过级联模型管道完成语音活动检测（VAD）、语音识别（ASR）及文本后处理（ITN），并将结构化识别结果实时返回客户端。
 
-**核心处理流程**：`音频流输入` → `VAD 语音断句` → `ASR 语音转文字` → `ITN 文本逆正则化` → `结构化结果输出`
+**核心处理流程**：`音频流输入` → `VAD 语音断句` → `异步 ASR 语音转文字` → `ITN 文本逆正则化` → `结构化结果输出`
 
 **依赖模型与推理引擎**：
 
@@ -29,22 +29,23 @@
 
 - **异步 I/O**：WebSocket 连接处理使用 `asyncio` 支持高并发长连接。
 - **VAD 动态批处理**：采用 Silero VAD **全局单实例 + 动态批处理** 架构。服务启动时加载一个 Silero JIT 模型（`SileroVADBatchProcessor` 全局单例），每个连接的时序状态（RNN context + hidden state）在服务端外部管理。后台 asyncio Task 从队列中收集多个连接的帧请求，凑批后统一执行一次 batch forward，再将概率结果分发给各连接。经压测验证，单实例 + batch_size=256 可在实时约束内服务 **500 路并发**（RTF < 1.0）。每个连接持有独立的 `StreamingVADSession`，负责帧缓冲与动态阈值断句逻辑。
+- **ASR 异步后台处理**：VAD 触发断句后，ASR+ITN 推理通过 `asyncio.create_task()` 在后台异步执行，**不阻塞**音频帧的持续接收与 VAD 处理。每个连接通过 `asyncio.Lock`（`send_lock`）保证多个并发 ASR 后台任务向 WebSocket 写入结果时不会交错。客户端发送结束帧（status=2）后，服务端会等待所有后台 ASR 任务完成，再发送终态响应。
 - **ITN 多进程池**：ITN 采用固定 **8 个多进程实例**（`spawn` 模式），请求通过 Pool 内部队列自动负载均衡分发。每个进程预加载 `ITNProcessor` 单例，避免 GIL 限制下的 CPU 密集型 FST 计算瓶颈。结果通过 `Manager().Queue()` 跨进程安全回传。服务启动时 **eager init** 所有进程并预热模型。
 - **vLLM 服务化**：ASR 推理由独立容器内的 vLLM 服务承载，本服务通过 OpenAI 兼容 RESTful API 与其通信，vLLM 进程常驻，无需每次请求重启。
 
 ### 2.2 数据流详解
 
-1. **连接建立**：客户端连接至 `ws://host:port/tuling/asr/v3`，需在 **5 秒内**完成握手验证。系统最大并发连接数为 **64**。WebSocket 连接依赖底层的 Ping/Pong 机制维持（建议设置 `ping_interval=20`，`ping_timeout=300` 以适应高并发）。
+1. **连接建立**：客户端连接至 `ws://host:port/tuling/asr/v3`，需在 **5 秒内**完成握手验证。系统最大并发连接数为 **64**。WebSocket 连接依赖底层的 Ping/Pong 机制维持（默认 `ping_interval=5`，`ping_timeout=20`）。
 2. **音频接收**：客户端持续发送 Base64 编码的 PCM 音频帧。
 3. **语音活动检测**：VAD 服务实时分析音频流，检测话语结束（Endpoint）时触发回调。Silero VAD 的 `window_size` 固定为 **512 samples（32ms @ 16kHz）**。客户端发送的音频在服务端内部被重新切片为 512-sample 帧后提交至全局批处理器。每个连接持有独立的 `StreamingVADSession` 实例，保证时序状态隔离（状态由批处理器外部管理）。
    - **动态转写触发规则**：停顿等待时间随已收集语音长度线性缩短，具体逻辑如下：
      - **短音频抑制**：语音时长 `< 0.5s`，视为噪声或误触，不触发（继续等待）。
      - **长音频强制触发**：语音时长 `>= 30.0s`，无论停顿多久立即触发，防止缓冲区堆积（即转发给 ASR 的语音最长为 30 秒）。
-     - **动态停顿阈值（0\~20s）**：累积语音 `0s` 时需停顿 `2.0s (T_MAX)` 方可触发；累积至 `20s` 时仅需 `0.5s (T_MIN)`，两者之间线性递减（斜率 `K = 0.075`）。语音越长，触发断句需要的停顿越短。
+     - **动态停顿阈值（0\~20s）**：累积语音 `0s` 时需停顿 `1.0s (T_MAX)` 方可触发；累积至 `20s` 时仅需 `0.5s (T_MIN)`，两者之间线性递减（斜率 `K = 0.025`）。语音越长，触发断句需要的停顿越短。
      - **固定停顿阈值（20\~30s）**：累积语音 `>= 20s` 后，停顿 `0.5s` 即触发转发。
-4. **语音识别**：截取的完整语音片段通过 HTTP 请求发送至 vLLM 服务（OpenAI 兼容接口），由 Qwen3-ASR-1.7B 模型完成转写。热词通过拼接提示词（Prompt）的方式注入，以提升特定词汇识别准确率。
+4. **语音识别（异步后台）**：VAD 触发断句后，截取的完整语音片段通过 `asyncio.create_task()` 在**后台异步**发送至 vLLM 服务（OpenAI 兼容接口），由 Qwen3-ASR-1.7B 模型完成转写。**ASR 推理不阻塞音频帧的持续接收**，多个 VAD 分段可以同时进行 ASR 推理。热词通过拼接提示词（Prompt）的方式注入，以提升特定词汇识别准确率。
 5. **文本后处理**：ASR 原始输出经 ITN 模型处理，转换为标准化文本（如数字、符号规范化）。ITN 请求通过 8 实例多进程池自动负载均衡分流。
-6. **结果推送**：服务端将带时间戳的词语级/句子级结果以 JSON 格式通过 WebSocket 推送给客户端。
+6. **结果推送**：后台 ASR 任务完成后，通过 `send_lock` 互斥锁安全地将带时间戳的词语级/句子级结果以 JSON 格式通过 WebSocket 推送给客户端。由于 ASR 是异步的，结果的推送顺序可能与断句顺序不完全一致（短句可能先于长句返回），但每个结果都包含准确的 `segId`、`bg`、`ed` 时间戳，客户端可按需重排序。
 
 ### 2.3 场景示例：三段式连续语音处理流
 
@@ -52,17 +53,17 @@
 
 1. **握手与推流开始**：客户端发送 `status: 0` 帧建立连接。随后开始以 40ms 间隔持续推送音频流帧（`status: 1`）。
 2. **第一段（"你好"） —— 正常停顿触发**：
-   - **输入**：用户说了 1s 的"你好"，然后思考停顿了 2.0s。
-   - **VAD 判定**：当前收集语音长 1s，根据公式计算动态停顿阈值约为 `2.0 - 0.075*1 = 1.925s`。实际停顿 2.0s `>` 1.925s，**成功触发第一次断句**。
-   - **ASR 与推送**：服务端截取这 1s 的音频封装成 HTTP 请求发给 vLLM；拿到 ASR 结果并经过 ITN 后，通过 WebSocket 将"你好"推送给客户端（附带 `segId: 0` 和识别中状态 `status: 1`）。此时 VAD 缓冲区清空并重新开始收集。
+   - **输入**：用户说了 1s 的"你好"，然后思考停顿了 1.0s。
+   - **VAD 判定**：当前收集语音长 1s，根据公式计算动态停顿阈值约为 `1.0 - 0.025*1 = 0.975s`。实际停顿 1.0s `>` 0.975s，**成功触发第一次断句**。
+   - **异步 ASR**：服务端通过 `asyncio.create_task()` 在**后台启动 ASR 任务**，截取这 1s 的音频封装成 HTTP 请求发给 vLLM。**主循环不等待 ASR 完成，继续接收后续音频帧**。ASR 完成后，通过 `send_lock` 安全地将"你好"推送给客户端（附带 `segId: 0` 和识别中状态 `status: 1`）。VAD 缓冲区清空并重新开始收集。
 3. **第二段（"帮我查一下今天的天气"） —— 动态缩短阈值触发**：
-   - **输入**：用户说了 6s（语速较慢），然后轻微停顿了 1.6s。
-   - **VAD 判定**：当前语音长 6s，动态停顿阈值随之降低，约为 `2.0 - 0.075*6 = 1.55s`。实际停顿 1.6s `>` 1.55s，**成功触发第二次断句**。
-   - **ASR 与推送**：截取这 6s 音频请求 vLLM，随后推送结果"帮我查一下今天的天气"（附带 `segId: 1` 和识别中状态 `status: 1`）。VAD 缓冲区再次清空。
+   - **输入**：用户说了 6s（语速较慢），然后轻微停顿了 0.9s。
+   - **VAD 判定**：当前语音长 6s，动态停顿阈值随之降低，约为 `1.0 - 0.025*6 = 0.85s`。实际停顿 0.9s `>` 0.85s，**成功触发第二次断句**。
+   - **异步 ASR**：同样在后台启动 ASR 任务。此时第一段的 ASR 可能仍在进行中，两段 ASR 可以**并行推理**。推送结果"帮我查一下今天的天气"（附带 `segId: 1` 和识别中状态 `status: 1`）。VAD 缓冲区再次清空。
 4. **第三段（"特别是下午会不会下雨"） —— 客户端主动结束触发**：
    - **输入**：用户最后说了 3s 的内容。说完后，用户立刻松开语音按钮或关闭麦克风，客户端发送结束帧（`status: 2`）。
    - **VAD 判定**：服务端收到 `status: 2`，无视当前是否达到停顿阈值，**强制截断并触发最后一段的转写**。
-   - **ASR 与推送**：截取最后 3s 音频请求 vLLM。处理完成后，向客户端推送最终结果"特别是下午会不会下雨"（附带 `segId: 2` 和整体结束状态 `status: 2`）。结果发送完毕后，**服务端不会主动断开 WebSocket 连接**，而是等待客户端主动关闭，以防止提前断连导致结果未送达或状态异常。
+   - **终态处理**：最后一段音频也通过后台 ASR 任务处理。服务端**等待所有后台 ASR 任务完成**后，再发送一个纯终态信号（`status: 2`）。结果发送完毕后，**服务端不会主动断开 WebSocket 连接**，而是等待客户端主动关闭，以防止提前断连导致结果未送达或状态异常。
 
 ---
 
@@ -196,8 +197,8 @@
 | `ITN_WORKERS` | 8 | ITN 多进程池实例数（固定容量设计，`spawn` 模式）。每个进程预加载 `ITNProcessor` 单例。 |
 | `MAX_CONNECTIONS` | 64 | 最大并发 WebSocket 连接数限制，超限时**直接拒绝**新连接（WebSocket close code `1013 Try Again Later`）。 |
 | `HANDSHAKE_TIMEOUT` | 5 | 握手超时时间（秒），连接建立后须在此时间内完成首帧验证。 |
-| `WS_PING_INTERVAL` | 20 | WebSocket 心跳（Ping）发送间隔（秒）。 |
-| `WS_PING_TIMEOUT` | 300 | WebSocket 心跳超时时间（秒）。高并发下设置较长以避免误判掉线。 |
+| `WS_PING_INTERVAL` | 5 | WebSocket 心跳（Ping）发送间隔（秒）。 |
+| `WS_PING_TIMEOUT` | 20 | WebSocket 心跳超时时间（秒）。 |
 | `MP_QUEUE_LOG_INTERVAL_SEC` | 10 | ITN 多进程池队列深度监控日志打印间隔（秒）。 |
 | `VLLM_API_BASE` | http://148.148.52.127:15002/v1 | vLLM 服务的 OpenAI 兼容 API 地址。 |
 | `VLLM_MODEL_NAME` | Qwen3-ASR-1.7B | vLLM 中加载的 ASR 模型名称。 |
@@ -205,7 +206,7 @@
 | `ASCEND_RT_VISIBLE_DEVICES` | 0 | 本服务可见的 Ascend NPU 设备 ID（由 vLLM-Ascend 使用）。 |
 | `HOTWORDS` | （空） | 服务端默认热词列表，逗号分隔（如 `张三丰,武当山,太极拳`）。客户端传入的热词会追加合并。 |
 | `LOG_LEVEL` | INFO | 日志输出级别（DEBUG 用于排查）。 |
-| `VAD_PAUSE_MAX` | 2.0 | VAD 动态断句：累积语音 0s 时所需停顿秒数（线性区间上限）。 |
+| `VAD_PAUSE_MAX` | 1.0 | VAD 动态断句：累积语音 0s 时所需停顿秒数（线性区间上限）。 |
 | `VAD_PAUSE_MIN` | 0.5 | VAD 动态断句：累积语音 ≥ `VAD_DYNAMIC_RANGE_END` 时所需停顿秒数（线性区间下限）。 |
 | `VAD_DYNAMIC_RANGE_END` | 20.0 | VAD 动态断句：线性递减区间终点（秒），超过此值使用 `VAD_PAUSE_MIN`。 |
 | `VAD_MIN_SPEECH` | 0.5 | VAD 短音频抑制门限（秒），语音不足此值则不转发至 ASR。 |
@@ -226,7 +227,7 @@
 pip install -r requirements.txt
 
 # 服务启动
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ws-ping-interval 20 --ws-ping-timeout 300
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ws-ping-interval 5 --ws-ping-timeout 20
 
 # Docker 部署
 docker-compose -f docker-compose.yaml up -d
@@ -278,7 +279,7 @@ docker-compose -f docker-compose.yaml up -d
 
 | 常见问题 | 排查步骤与解决方案 |
 | :--- | :--- |
-| **WebSocket 频繁断开 (1006)** | 高并发下事件循环偶发阻塞，导致 Ping 超时。启动时需加上 `--ws-ping-timeout 300`。 |
+| **WebSocket 频繁断开 (1006)** | 高并发下事件循环偶发阻塞，导致 Ping 超时。检查 `WS_PING_TIMEOUT` 配置；ASR 已改为异步后台处理，不再阻塞事件循环。 |
 | **握手超时（5s 断开）** | 检查客户端发送的 JSON 是否包含必填字段 `traceId`、`bizId`，以及 `header.status` 是否正确设为 `0`（握手帧）。 |
 | **模型加载失败** | 执行 `curl http://localhost:8000/api/v1/ready` 查看状态；检查 `weights/` 目录挂载权限；确认 vLLM 容器已正常启动。 |
 | **音频识别无结果** | 确认发送音频为 **PCM 16k/16bit** 格式，且 Base64 编码正确；检查 vLLM 服务是否可达（`curl $VLLM_API_BASE/models`）。 |
@@ -290,7 +291,7 @@ docker-compose -f docker-compose.yaml up -d
 
 ```bash
 export LOG_LEVEL=DEBUG
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ws-ping-interval 20 --ws-ping-timeout 300
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ws-ping-interval 5 --ws-ping-timeout 20
 ```
 
 ---
@@ -310,7 +311,8 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ws-ping-interval 20 --ws
 - [x] VAD 全局批处理器（`vad_service.py`，`SileroVADBatchProcessor` 单例 + 外部状态管理 + asyncio 凑批推理）
 - [x] 异步 ASR 推理服务（`asr_service.py`，httpx → vLLM OpenAI 兼容接口）
 - [x] ITN 多进程池（`itn_pool.py`，8 实例 spawn 模式 + Pool 内部负载均衡 + Queue 结果回传 + eager init 预热）
-- [x] WebSocket 全链路处理（`websocket.py`，握手→音频→断句→推理→推送）
+- [x] WebSocket 全链路处理（`websocket.py`，握手→音频→断句→异步推理→推送）
+- [x] ASR 异步后台处理（`session.py` + `websocket.py`，`asyncio.create_task` + `send_lock` 互斥写入）
 - [x] 并发连接管理（`connection_manager.py`，Semaphore + 1013 拒绝）
 - [x] 会话状态机（`session.py`，sid 生成、seg_id 递增；每 Session 注册至 VAD 批处理器，close() 时注销）
 - [x] 健康探针与 Prometheus 指标暴露（`health.py`、`metrics.py`）

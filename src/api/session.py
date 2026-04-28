@@ -4,6 +4,7 @@ ASR 会话状态 management —— 每个 WebSocket 连接对应一个 ASRSessio
 
 from __future__ import annotations
 
+import asyncio
 import enum
 import random
 import string
@@ -33,6 +34,10 @@ class ASRSession:
     维护段序号、时间偏移、热词等。
     每个 Session 持有独立的 StreamingVADSession 实例，连接创建时初始化，
     连接关闭时通过 close() 方法显式注销。
+
+    ASR 推理采用异步后台任务模式：VAD 触发断句后，ASR+ITN 处理通过
+    asyncio.create_task() 在后台执行，不阻塞音频帧的持续接收与 VAD 处理。
+    _send_lock 保证多个并发 ASR 任务推送结果时不会交错写入 WebSocket。
     """
 
     def __init__(self, trace_id: str, biz_id: str, app_id: str = "") -> None:
@@ -51,8 +56,41 @@ class ASRSession:
         # 每连接独立的 VAD 会话（注册至全局批处理器）
         self.vad: StreamingVADSession = StreamingVADSession(sid=self.sid)
 
+        # ---- 异步 ASR 任务管理 ----
+        # WebSocket 发送锁：防止多个并发 ASR 后台任务同时写入 WebSocket
+        self._send_lock: asyncio.Lock = asyncio.Lock()
+        # 活跃 ASR 后台任务列表
+        self._pending_asr_tasks: list[asyncio.Task] = []
+
+    @property
+    def send_lock(self) -> asyncio.Lock:
+        """WebSocket 发送锁，多个并发 ASR 任务共享。"""
+        return self._send_lock
+
+    def track_asr_task(self, task: asyncio.Task) -> None:
+        """注册一个 ASR 后台任务，并清理已完成的旧任务。"""
+        # 清理已完成的任务，避免列表无限增长
+        self._pending_asr_tasks = [
+            t for t in self._pending_asr_tasks if not t.done()
+        ]
+        self._pending_asr_tasks.append(task)
+
+    async def wait_pending_asr(self) -> None:
+        """等待所有活跃 ASR 后台任务完成（用于发送终态前的同步）。"""
+        if self._pending_asr_tasks:
+            await asyncio.gather(*self._pending_asr_tasks, return_exceptions=True)
+            self._pending_asr_tasks.clear()
+
+    def cancel_pending_asr(self) -> None:
+        """取消所有活跃 ASR 后台任务（连接异常关闭时调用）。"""
+        for task in self._pending_asr_tasks:
+            if not task.done():
+                task.cancel()
+        self._pending_asr_tasks.clear()
+
     def close(self) -> None:
-        """释放 VAD 资源（从全局批处理器注销）。"""
+        """释放资源：取消后台任务 + 从 VAD 批处理器注销。"""
+        self.cancel_pending_asr()
         self.vad.close()
 
     def next_seg_id(self) -> int:

@@ -4,8 +4,12 @@ WebSocket 端点 /tuling/asr/v3 —— 核心处理逻辑。
 处理流程：
   1. 连接 → 检查并发上限 → 启动握手超时
   2. status=0 → 校验 → 初始化会话 → 回复握手成功
-  3. status=1 → 解码音频 → VAD → 若触发断句 → ASR → ITN → 推送结果
-  4. status=2 → 刷空缓冲区 → 推送终态结果 → 断开
+  3. status=1 → 解码音频 → VAD → 若触发断句 → 异步后台 ASR+ITN → 推送结果
+  4. status=2 → 刷空缓冲区 → 等待所有后台 ASR 任务完成 → 推送终态结果 → 断开
+
+ASR 异步处理：VAD 触发断句后，ASR+ITN 推理通过 asyncio.create_task() 在后台
+执行，不阻塞音频帧的持续接收。多个并发 ASR 任务通过 session.send_lock 保证
+WebSocket 写入不会交错。结果的 segId 和时间戳是自包含的，客户端可按需重排序。
 
 每个 segment 响应的 header.message 包含 JSON 格式的耗时信息：
   {"asr_ms": 123.4, "total_ms": 145.6}
@@ -110,7 +114,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         await _wait_for_client_disconnect_safely(websocket, session)
     finally:
         if session:
-            session.close()  # 从 VAD 批处理器注销
+            session.close()  # 取消后台 ASR 任务 + 从 VAD 批处理器注销
             connection_manager.unregister(session.sid)
             connection_slot_released = True
             asr_connections_current.dec()
@@ -160,7 +164,10 @@ async def _handle_audio_frame(
     session: ASRSession,
     msg: ClientMessage,
 ) -> None:
-    """处理音频数据帧。"""
+    """处理音频数据帧。
+
+    VAD 触发断句后，ASR+ITN 以后台异步任务执行，不阻塞后续音频帧的接收。
+    """
     if not msg.payload or not msg.payload.audio:
         return
 
@@ -177,22 +184,32 @@ async def _handle_audio_frame(
     # 喂入 VAD（通过全局批处理器异步推理）
     segments = await session.vad.feed_audio(pcm_int16)
 
-    # 对每个触发的语音段执行 ASR + ITN
+    # 对每个触发的语音段，启动后台 ASR+ITN 任务（不阻塞音频接收）
     for seg in segments:
-        await _process_segment(websocket, session, seg)
+        task = asyncio.create_task(
+            _process_segment(websocket, session, seg)
+        )
+        session.track_asr_task(task)
 
 
 async def _handle_end_frame(websocket: WebSocket, session: ASRSession) -> None:
-    """处理结束帧：刷空 VAD 缓冲区并推送终态结果。"""
+    """处理结束帧：刷空 VAD 缓冲区，等待所有 ASR 任务完成，推送终态。"""
     session.set_closing()
 
-    # 强制刷出残余音频
+    # 强制刷出残余音频（如有，也作为后台任务处理）
     seg = session.vad.flush()
     if seg is not None:
-        await _process_segment(websocket, session, seg, is_final=True)
-    else:
-        # 没有残余音频，发送纯终态信号（复用最后一个 seg_id，不递增）
-        last_seg_id = max(0, session.seg_id - 1)
+        task = asyncio.create_task(
+            _process_segment(websocket, session, seg)
+        )
+        session.track_asr_task(task)
+
+    # 等待所有后台 ASR 任务完成，确保结果全部推送后再发终态
+    await session.wait_pending_asr()
+
+    # 发送终态信号 (status=2)
+    last_seg_id = max(0, session.seg_id - 1)
+    async with session.send_lock:
         await _send_response(websocket, session, status=2, seg_id=last_seg_id)
 
 
@@ -224,9 +241,13 @@ async def _process_segment(
     websocket: WebSocket,
     session: ASRSession,
     seg: dict,
-    is_final: bool = False,
 ) -> None:
-    """对一个语音段执行 ASR → ITN → 推送结果。"""
+    """对一个语音段执行 ASR → ITN → 推送结果（后台任务）。
+
+    此函数作为 asyncio.Task 在后台运行，不阻塞主循环的音频接收。
+    通过 session.send_lock 保证多个并发任务的 WebSocket 写入互斥。
+    始终以 status=1 发送结果，终态 status=2 由 _handle_end_frame 统一发送。
+    """
     import json as _json
 
     t0 = time.monotonic()
@@ -278,8 +299,6 @@ async def _process_segment(
             ws=[ws_item],
         )
 
-        resp_status = 2 if is_final else 1
-
         # 在 header.message 中附带耗时 JSON，客户端可解析
         timing_msg = _json.dumps({
             "asr_ms": round(asr_ms, 1),
@@ -292,12 +311,14 @@ async def _process_segment(
                 message=timing_msg,
                 sid=session.sid,
                 traceId=session.trace_id,
-                status=resp_status,
+                status=1,  # 始终以 status=1 发送，终态由 _handle_end_frame 发送
             ),
             payload=ResponsePayloadWrapper(result=result),
         )
 
-        await websocket.send_text(response.model_dump_json())
+        # 通过 send_lock 保证多个并发任务的写入互斥
+        async with session.send_lock:
+            await websocket.send_text(response.model_dump_json())
 
         asr_processing_latency_ms.observe(total_ms)
         asr_segments_total.inc()
@@ -316,11 +337,17 @@ async def _process_segment(
             session.sid,
             seg_id,
         )
-        raise
+        # 不 re-raise：后台任务中的异常不应传播到主循环
+    except asyncio.CancelledError:
+        logger.debug("ASR task cancelled: sid=%s, seg_id=%d", session.sid, seg_id)
     except Exception as exc:
         logger.exception("Error processing segment %d: %s", seg_id, exc)
         asr_errors_total.labels(error_type="asr_inference").inc()
-        await _send_error(websocket, session, f"ASR error: {exc}")
+        try:
+            async with session.send_lock:
+                await _send_error(websocket, session, f"ASR error: {exc}")
+        except Exception:
+            pass
 
 
 async def _send_response(
