@@ -11,16 +11,16 @@ class Settings:
     # ---- 服务参数 ----
     WS_HOST: str = os.getenv("WS_HOST", "0.0.0.0")
     WS_PORT: int = int(os.getenv("WS_PORT", "8000"))
-    MAX_CONNECTIONS: int = int(os.getenv("MAX_CONNECTIONS", "64"))
+    MAX_CONNECTIONS: int = int(os.getenv("MAX_CONNECTIONS", "600"))
     HANDSHAKE_TIMEOUT: int = int(os.getenv("HANDSHAKE_TIMEOUT", "5"))
-    WS_PING_INTERVAL: float = float(os.getenv("WS_PING_INTERVAL", "5"))
-    WS_PING_TIMEOUT: float = float(os.getenv("WS_PING_TIMEOUT", "20"))
+    WS_PING_INTERVAL: float = float(os.getenv("WS_PING_INTERVAL", "60"))
+    WS_PING_TIMEOUT: float = float(os.getenv("WS_PING_TIMEOUT", "300"))
 
     # ---- ITN 多进程池 ----
     ITN_WORKERS: int = int(os.getenv("ITN_WORKERS", "8"))
 
     # ---- vLLM ----
-    VLLM_API_BASE: str = os.getenv("VLLM_API_BASE", "http://148.148.52.127:15002/v1")
+    VLLM_API_BASE: str = os.getenv("VLLM_API_BASE", "http://10.23.32.171:15002/v1")
     VLLM_MODEL_NAME: str = os.getenv("VLLM_MODEL_NAME", "Qwen3-ASR-1.7B")
     VLLM_API_KEY: str = os.getenv("VLLM_API_KEY", "EMPTY")
 
