@@ -168,9 +168,9 @@ class SileroVADBatchProcessor:
                     await asyncio.sleep(0.0005)
 
             # 执行批量推理
-            self._execute_batch(batch)
+            await self._execute_batch(batch)
 
-    def _execute_batch(
+    async def _execute_batch(
         self, batch: list[tuple[str, torch.Tensor, asyncio.Future]]
     ) -> None:
         """执行一次批量推理并将结果分发给各 future。"""
@@ -207,8 +207,8 @@ class SileroVADBatchProcessor:
             audio_batch = torch.cat(valid_frames, dim=0)  # [n, 512]
             x = torch.cat([contexts, audio_batch], dim=1)  # [n, 576]
 
-            # 批量推理
-            out, new_states = self._raw_model(x, states)
+            # 批量推理（移至后台线程执行，彻底避免霸占主线程阻塞事件循环）
+            out, new_states = await asyncio.to_thread(self._raw_model, x, states)
 
             # 更新 session 状态并分发结果
             for i, (sid, future) in enumerate(zip(valid_sids, valid_futures)):
