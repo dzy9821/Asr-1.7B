@@ -1,395 +1,261 @@
 # 风险与待办事项
 
 > 通过代码审查 + README 交叉验证得出，按严重程度分 P0 / P1 / P2 三级。
-> 每项附具体文件位置、风险说明和修改建议。
+> 标注 `[TODO]` 的为确认待修复项；标注 `[执行]` 的为直接操作项。
 
 ---
 
-## P0 — 高优先级（建议尽快修复） // 修改config是为了进行测试
+## P0 — 高优先级（建议尽快修复）
 
-### 0. config.py 默认值与 README 文档严重不一致 
+### 0. config.py 默认值改回 README 的生产默认值 `[执行]`
 
 **文件**：`src/core/config.py:14-17` vs `README.md:198-201`
 
-**问题**：代码中实际默认值与 README 声称的默认值有多处冲突，且差异巨大。如果运维按 README 理解行为而不设置环境变量，实际运行参数完全不同。
+**背景**：代码中 600/60/300 是压测时改的测试参数，README 中 64/5/20 才是生产默认值。
 
-| 变量 | config.py 默认 | README 默认 | 差异 |
-|------|---------------|------------|------|
-| `MAX_CONNECTIONS` | **600** | **64** | 差 9 倍，拒绝连接的阈值完全不同 |
-| `WS_PING_INTERVAL` | **60** | **5** | 差 12 倍，心跳频率差异极大 |
-| `WS_PING_TIMEOUT` | **300** | **20** | 差 15 倍，断连检测时间完全不同 |
-| `VLLM_API_BASE` | `10.23.32.171:15002` | `148.148.52.127:15002` | 不同内网 IP |
+| 变量 | config.py 当前默认 | README 生产默认 |
+|------|-------------------|----------------|
+| `MAX_CONNECTIONS` | 600 | **64** |
+| `WS_PING_INTERVAL` | 60 | **5** |
+| `WS_PING_TIMEOUT` | 300 | **20** |
+| `VLLM_API_BASE` | `10.23.32.171:15002` | `148.148.52.127:15002` |
 
-此外 README 明确写道"最大并发连接数为 **64**"，与代码中 600 冲突。README 还列出 `pydantic-settings >=2.0.0` 为依赖，但 `pyproject.toml` 中并没有此项。
-
-**建议**：以 README 的值为准，将 config.py 默认值改为与 README 一致（READEME 是对外文档，应该是经过讨论确认后的准确值）。或者反过来更新 README。**必须统一其中一个方向。**
+**操作**：
 
 ```python
-# 建议修改 config.py 为与 README 一致：
+# config.py —— 改回生产默认值
 MAX_CONNECTIONS: int = int(os.getenv("MAX_CONNECTIONS", "64"))
 WS_PING_INTERVAL: float = float(os.getenv("WS_PING_INTERVAL", "5"))
 WS_PING_TIMEOUT: float = float(os.getenv("WS_PING_TIMEOUT", "20"))
 ```
 
-同时更新 pyproject.toml 增加 `pydantic-settings` 或从 README 中移除。 
+压测时通过环境变量覆盖即可：`MAX_CONNECTIONS=600 WS_PING_INTERVAL=60 ...`
+
+此外 README 列出 `pydantic-settings >=2.0.0` 但 `pyproject.toml` 中没有，确认是否需要补充。// 暂时不补充
 
 ---
 
-### 1. VAD `_states` 存在 await 期间的竞态，可导致内存泄漏 // TODO
+### 1. VAD `_states` 在 `await asyncio.to_thread` 期间可能被并发修改 `[TODO]`
 
 **文件**：`src/services/vad_service.py:171-225`
 
-**问题**：`_execute_batch` 在 `await asyncio.to_thread(...)` 之前读取了 `self._states[sid]` 的状态，在线程执行期间事件循环控制权被释放，此时若连接断开，`unregister_session(sid)` 会将 state 从 dict 中删除。随后 `_execute_batch` 恢复执行，又把 state 写回 `self._states`，形成僵尸 state 泄漏。
+**问题**：`_execute_batch` 在 `await asyncio.to_thread(...)` 之前读取了 `self._states[sid]`，线程执行期间事件循环释放控制权。若此时 `unregister_session(sid)` 被调用，state 从 dict 中删除，之后 `_execute_batch` 恢复执行又写回 `self._states[sid]`，形成僵尸 state 泄漏。
+
+**实际风险分析**：经过完整时序追溯，**正常断开路径下不会触发此竞态**。`feed_audio` 内部逐帧串行 `await future`，返回时所有 VAD future 均已 resolve，其后才走 `wait_pending_asr` → 发送终态 → 等客户端断开 → `finally` → `unregister_session`。此时 VAD 队列中已无该 session 的待处理帧。且 `WebSocketDisconnect` 只由 `receive_text()/send_text()` 抛出，不会在 `await future`（VAD future）期间触发。
+
+**唯一可能场景**：应用 shutdown（容器 SIGTERM）期间，`_batch_loop` 正在 `asyncio.to_thread` 中处理包含该 session 的 batch，同时 uvicorn 触发连接关闭 → `finally` → `unregister_session`。竞态窗口 = VAD 推理耗时（3~8ms），概率极低。
+
+**结论**：实际命中概率极低，但修复成本为零。保留作为防御性加固。
 
 ```python
-# vad_service.py:200-218 问题片段
+# vad_service.py:200-218
 contexts = torch.cat([self._states[sid][0] for sid in valid_sids], dim=0)
 states   = torch.cat([self._states[sid][1] for sid in valid_sids], dim=1)
 
-# ★ 此 await 释放事件循环，unregister_session 可能在此期间执行
+# ★ await 释放事件循环，unregister_session 可能在此期间执行
 out, new_states = await asyncio.to_thread(self._raw_model, x, states)
 
-# ★ 恢复执行后直接写入，未检查 sid 是否仍在 self._states 中
+# ★ 直接写回，未检查 sid 是否仍在 self._states 中
 for i, (sid, future) in enumerate(zip(valid_sids, valid_futures)):
     self._states[sid] = (..., ...)  # ← 僵尸写入
 ```
 
-**建议**：在写回 `self._states` 之前增加有效性检查：
+**修复**：写回前检查 sid 有效性。
 
 ```python
 for i, (sid, future) in enumerate(zip(valid_sids, valid_futures)):
     if sid not in self._states:
-        continue  # session 已注销，跳过
+        continue
     self._states[sid] = (..., ...)
     future.set_result(out[i].item())
 ```
 
 ---
 
-### 2. 连接信号量通过访问 CPython 私有属性实现 //项目运行环境为3.11，检查在3.11中是否有风险
-
-**文件**：`src/api/connection_manager.py:30-37`
-
-**问题**：`try_acquire()` 直接读写 `asyncio.Semaphore._value`，这是 CPython 内部实现细节，不保证跨版本兼容。且在 Python 3.12+ 中 semaphore 的实现已有变化。`unregister` 调用 `release_slot()`（正常的 `semaphore.release()`），但如果有异常路径直接调用了 `release_slot` 而没经过正常的 acquire，可能导致计数溢出。
-
-```python
-# connection_manager.py:30-37
-def try_acquire(self) -> bool:
-    if self._semaphore._value <= 0:      # ← 访问私有属性
-        return False
-    self._semaphore._value -= 1          # ← 手动操作内部状态
-    return True
-```
-
-**建议**：使用 `BoundedSemaphore` 配合显式的 `acquire` + try/except 模式，或改用 `asyncio.Lock` + 计数器：
-
-```python
-def try_acquire(self) -> bool:
-    if self._semaphore.locked():         # 公开 API，安全
-        return False
-    # 使用内部队列 + 协程安全的 acquire_nowait 替代方案
-    ...
-```
-
----
-
-### 3. VAD `feed_audio` 中 `np.concatenate` 每次全量拷贝 // 每32ms对已有缓冲区做完整的内存拷贝？不能直接append吗
+### 2. VAD `feed_audio` 中 `np.concatenate` 每次全量内存拷贝 `[TODO]`
 
 **文件**：`src/services/vad_service.py:283`
 
-**问题**：每次喂入新音频都执行 `np.concatenate([self._sample_buffer, pcm_int16])`，对已有缓冲区做完整内存分配和拷贝。对于连续说话 30 秒的场景，缓冲区可累积约 960KB int16 数据，且每 32ms 触发一次完整拷贝，高频 GC 会导致延迟抖动。
+**问题**：`np.ndarray` 是固定大小的连续内存块，没有 `.append()` 方法。每次调用 `np.concatenate` 都会分配全新内存 + 全量拷贝。对于连续说话 30s 场景（约 960KB int16），每 32ms 触发一次完整拷贝，高频 GC 导致延迟抖动。
 
 ```python
-# vad_service.py:283
+# vad_service.py:283 —— 每次都是完整分配 + 拷贝
 self._sample_buffer = np.concatenate([self._sample_buffer, pcm_int16])
 ```
 
-**建议**：使用 list-of-chunks 模式，只在需要取帧时才 concat，或使用 ring buffer 预分配：
+**修复**：用 Python list 收集 chunks（`.append` 是 O(1)），只在切帧时才临时 concat。
 
 ```python
-# 方案 A: chunk list
-self._chunks: list[np.ndarray] = []
-self._chunk_total = 0
-
 def feed_audio(self, pcm_int16):
     self._chunks.append(pcm_int16)
     self._chunk_total += len(pcm_int16)
-    # 需要操作时将 chunks 拼接为 buffer，用完丢弃
-    ...
 
-# 方案 B: 预分配 ring buffer (如果上游帧大小固定)
+    # 当累积够一帧时，临时拼接 → 取帧 → 丢弃临时 buffer
+    while self._chunk_total >= self.hop_size:
+        buffer = np.concatenate(self._chunks)
+        frame = buffer[:self.hop_size]
+        remainder = buffer[self.hop_size:]
+        self._chunks = [remainder] if len(remainder) > 0 else []
+        self._chunk_total = len(remainder)
+        ...
 ```
 
 ---
 
 ## P1 — 中优先级（建议近期处理）
 
-### 4. `session=None` 的控制流依赖隐性约定 // 期望服务端等待客户端关闭连接
+### 3. `session=None` 的控制流依赖隐性约定 `[TODO]`
 
 **文件**：`src/api/websocket.py:75-77`
 
-**问题**：`_handle_handshake` 返回 `None` 时，代码进入 `_wait_for_client_disconnect`——这是一个无限循环 `while True: await ws.receive_text()`，只在客户端断开时抛 `WebSocketDisconnect`。但此行为隐式假设该函数永不正常返回，如果将来任何人修改了这个函数（比如加了 timeout），`session` 仍为 `None` 但代码继续执行到 `session.sid`，直接 `AttributeError`。
+**问题**：`_handle_handshake` 返回 `None` 时进入 `_wait_for_client_disconnect`（无限循环 `while True: await ws.receive_text()`），设计意图是等待客户端主动断开。但代码结构隐式依赖该函数永不正常返回——如果未来修改了 `_wait_for_client_disconnect`（比如加了 timeout），`session` 仍为 `None` 但代码会继续执行到 `session.sid`，直接 `AttributeError`。
 
 ```python
 # websocket.py:75-80
 session = await _handle_handshake(websocket)
 if session is None:
-    await _wait_for_client_disconnect(websocket)  # ← 无限循环或抛异常
-# 下面这行在 session=None 时不可达，但完全依赖 _wait_for_client_disconnect 的实现
+    await _wait_for_client_disconnect(websocket)  # 无限循环，仅 WebSocketDisconnect 才退出
+# 下行在 session=None 时不可达，但完全依赖上面函数永不正常返回
 connection_manager.register(session.sid, session.trace_id)
 ```
 
-**建议**：在 `if session is None` 块内显式 `return`，或抛一个明确异常：
+**修复**：加显式 `return`，不改变行为，仅增加防御。
 
 ```python
 if session is None:
     await _wait_for_client_disconnect(websocket)
-    return  # ← 显式终止，不依赖隐式行为
+    return
 ```
 
 ---
 
-### 5. ITN 多进程池 shutdown 直接 hard kill // ITN进程池如无异常应该只会在服务关闭时关闭吧，深入分析一下
+### 4. ITN 多进程池 shutdown 直接 hard kill `[TODO]`
 
 **文件**：`src/services/itn_pool.py:182-184`
 
-**问题**：`pool.terminate()` 立即杀死所有 worker 进程，不等待正在执行的任务完成。在正常关闭流程中，如果有 ASR 任务刚拿到 vLLM 结果正准备调用 ITN，或 ITN worker 正在处理中，这些段的结果会丢失，客户端可能永远收不到最后几个 segment。
+**分析**：`itn_pool.shutdown()` 只在 FastAPI lifespan 的 shutdown 阶段调用（容器关闭时），正常连接断开不会触发。被 `terminate()` 影响的是"容器收到 SIGTERM 时还在 pipeline 中的少量段"。影响范围可控，但加短暂 grace period 成本极低。
 
 ```python
 # itn_pool.py:182-184
-self._runtime.pool.terminate()   # ← 立即 SIGTERM，不等待
+self._runtime.pool.terminate()   # ← 立即 SIGTERM
 self._runtime.pool.join()
 ```
 
-**建议**：先优雅关闭再 hard kill：
+**修复**：先 `close()` + 短暂 `join(timeout)`，超时后再 `terminate()`。
 
 ```python
-self._runtime.pool.close()       # 阻止新任务提交
+self._runtime.pool.close()
 try:
-    self._runtime.pool.join(timeout=5)  # 等待进行中的任务完成
+    self._runtime.pool.join(timeout=5)
 except Exception:
     pass
-self._runtime.pool.terminate()   # 超时后才强杀
+self._runtime.pool.terminate()
 self._runtime.pool.join()
 ```
 
 ---
 
-### 6. 默认线程池被多处共用，存在资源争用 // vad不是已经放在异步协程做了吗？
+### 5. ASR HTTP 客户端需向客户端透传 vLLM 错误码 `[TODO]`
 
-**文件**：
-- `src/services/vad_service.py:211` — `asyncio.to_thread(self._raw_model, ...)`
-- `src/services/asr_service.py:65` — `loop.run_in_executor(None, _encode_audio, ...)`
+**文件**：`src/services/asr_service.py:90-109`、`src/api/websocket.py:340-351`
 
-**问题**：VAD 模型推理和 ASR 音频编码都使用 Python 默认线程池（`min(32, cpu_count+4)` 个线程）。当前代码层面 `MAX_CONNECTIONS` 默认 600（README 写 64，见 P0-0），如果实际按 600 运行，大量 VAD 批推理和 ASR 编码可能争抢同一批线程导致延迟。ITN 已经正确隔离了专用线程池（`itn_pool._executor`），但 VAD 侧和 ASR 编码侧没有。
+**问题**：vLLM 返回 429 / 502 / 503 等错误时，`response.raise_for_status()` 抛出 `HTTPStatusError`，当前未捕获（重试只覆盖 `ReadError/ConnectError/RemoteProtocolError`）。异常向上传播到 `_process_segment` 的 `except Exception` 分支，客户端只收到空结果 + generic "ASR error" 消息，无法区分是"识别失败"还是"vLLM 过载"。
 
-**说明**：如果 `MAX_CONNECTIONS` 实际按 README 的 64 运行，此项风险程度降低，默认线程池容量足够。
+**修复思路**：`asr_service.recognize()` 中捕获 `HTTPStatusError`，**不重试**（压测场景下重试加剧 vLLM 负载），而是将有意义的状态码和错误信息返回给调用方。同时确保 `asr_errors_total` 正确递增（当前已递增，此项 OK）。
 
-**建议**：为 VAD 批处理器分配专用线程池：
-
-```python
-# vad_service.py
-import concurrent.futures
-
-class SileroVADBatchProcessor:
-    def __init__(self, ...):
-        ...
-        self._executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=4,
-            thread_name_prefix="vad-infer",
-        )
-
-    async def _execute_batch(self, batch):
-        ...
-        out, new_states = await asyncio.get_event_loop().run_in_executor(
-            self._executor, self._raw_model, x, states
-        )
-```
+具体方案：
+1. `asr_service.recognize()` 捕获 `HTTPStatusError`，抛出带状态码的自定义异常
+2. `_process_segment` 的 except 分支识别该异常，向客户端推送包含状态码的错误消息
+3. 同时确保 `asr_errors_total` 正确计数（用于 Prometheus 计算 `asr_error_rate`）
 
 ---
 
-### 7. 无 WebSocket 消息大小限制 // 客户端会处理
+## P2 — 低优先级（技术债务，逐步清理）
 
-**文件**：`src/api/websocket.py:91`
+### 6. 连接信号量访问了私有属性 `_value` `[TODO]`
 
-**问题**：`await websocket.receive_text()` 没有任何消息大小限制。恶意或出错的客户端发送巨大的 Base64 音频帧时，服务端会尝试将整个消息加载到内存中解码。
+**文件**：`src/api/connection_manager.py:30-37`
 
-```python
-# websocket.py:91
-raw = await websocket.receive_text()  # ← 无上限
-```
-
-**建议**：结合 uvicorn 的 `--ws-max-size` 参数限制，或在应用层校验：
+**分析**：CPython 3.11 中 `asyncio.Semaphore` 是纯 Python 实现，`try_acquire()` 没有 `await` 所以不存在运行时竞态。且 `_value` 属性名在 3.11/3.12/3.13 中未变化。**3.11 中功能安全，无运行时 bug。**风险纯粹是代码规范层面——访问私有属性违反封装，未来版本可能重构。
 
 ```python
-# uvicorn 启动时
-uvicorn.run("main:app", ..., ws_max_size=2 * 1024 * 1024)  # 2MB 上限
+def try_acquire(self) -> bool:
+    if self._semaphore._value <= 0:      # ← 当前 3.11 中可工作
+        return False
+    self._semaphore._value -= 1
+    return True
 ```
+
+**修复**：用公开 API 重写，`locked()` 是 `asyncio.Semaphore` 的公开方法。
 
 ---
 
-### 8. ASR HTTP 客户端只重试连接错误，不重试 HTTP 错误状态码 // 添加返回客户端错误码的逻辑，但不重试
-
-**文件**：`src/services/asr_service.py:90-109`
-
-**问题**：重试逻辑只捕获了 `ReadError / ConnectError / RemoteProtocolError`，但 vLLM 返回 429 (rate limit)、502 (bad gateway)、503 (overloaded) 时，`response.raise_for_status()` 会抛 `HTTPStatusError`，这个异常**没被捕获也不会重试**，直接向上传播到 `_process_segment` 被当作 ASR 推理失败处理。
-
-**建议**：将 `HTTPStatusError`（至少 transient 状态码）加入重试逻辑：
-
-```python
-except (httpx.ReadError, httpx.ConnectError, httpx.RemoteProtocolError,
-        httpx.HTTPStatusError) as exc:
-    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code < 500:
-        raise  # 4xx 客户端错误不重试
-    # 5xx / 连接错误：重试
-    ...
-```
-
----
-
-## P2 — 低优先级（技术债务，可在迭代中逐步清理）
-
-### 9. `itn_service.py` 是死代码 // 删掉已弃用的代码
+### 7. 删除死代码 `itn_service.py` `[执行]`
 
 **文件**：`src/services/itn_service.py`
 
-**问题**：该文件实现了基于 `ThreadPoolExecutor` 的 ITN 服务，但全项目没有任何地方导入或使用它。实际生产使用的是 `itn_pool.py`（基于 multiprocessing）。
-
-**建议**：删除 `src/services/itn_service.py`，减少维护负担。
+该文件实现了基于 `ThreadPoolExecutor` 的 ITN 服务，未被任何地方引用。生产使用的是 `itn_pool.py`。直接删除。
 
 ---
 
-### 10. `sys.path` 运行时注入 // TODO
+### 8. `sys.path` 运行时注入 `[TODO]`
 
-**文件**：`src/services/itn_pool.py:61-62`、`src/services/itn_service.py:31-32`
-
-**问题**：两个文件都在 `import` 前动态往 `sys.path` 中插入模型目录。如果将来安装了同名的 pip 包或路径变更，import 行为不确定。
+**文件**：`src/services/itn_pool.py:61-62`
 
 ```python
-models_dir = os.path.abspath(...)
 if models_dir not in sys.path:
     sys.path.insert(0, models_dir)
 from itn_wrapper import ITNProcessor
 ```
 
-**建议**：使用 `importlib` 按路径显式加载，或将模型目录做成 pip 包：
-
-```python
-import importlib.util
-spec = importlib.util.spec_from_file_location("itn_wrapper", f"{models_dir}/itn_wrapper.py")
-itn_module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(itn_module)
-```
+**修复**：用 `importlib.util.spec_from_file_location` 按路径显式加载。
 
 ---
 
-### 11. `random.choices` 生成 session ID 存在碰撞风险 //忽略
-
-**文件**：`src/api/session.py:17-21`
-
-**问题**：`AST_` + 13位随机字符（A-Z, 0-9），使用 `random.choices` 而非密码学安全随机。13 位 36 进制 = 36^13 ≈ 1.7×10^20 种可能，对于 600 并发来说碰撞概率极低，但 `random` 模块在 multiprocessing spawn 场景下可能因种子重复导致碰撞。
-
-**建议**：改用 `secrets` 模块或 `uuid.uuid4().hex`：
-
-```python
-import secrets
-import string
-
-def _generate_sid() -> str:
-    alphabet = string.ascii_uppercase + string.digits
-    suffix = ''.join(secrets.choice(alphabet) for _ in range(13))
-    return f"AST_{suffix}"
-```
-
----
-
-### 12. Metrics 和连接详情端点无鉴权 // 忽视
-
-**文件**：`src/api/metrics.py:35`、`src/api/health.py:30-36`
-
-**问题**：`/metrics` 和 `/api/v1/connections` 对外暴露，没有任何认证机制。`/connections` 直接返回所有活跃连接的 `sid → trace_id` 映射，可能泄露业务信息。
-
-**说明**：README §6.1 表明这些端点用于 K8s Probes 和 Prometheus 抓取，属于基础设施内部用途。如果部署时通过 Service/Ingress 限制外部访问，此项风险降低。但仍建议在代码层面增加保护。
-
-**建议**：拆分端口（8000 对外 WebSocket + 9090 对内 metrics/health），或至少对 `/connections` 做简单鉴权。
-
----
-
-### 13. 配置文件硬编码内网 IP（且与 README 不一致）// 忽视
-
-**文件**：`src/core/config.py:23`
-
-```python
-VLLM_API_BASE: str = os.getenv("VLLM_API_BASE", "http://10.23.32.171:15002/v1")
-# README 写的却是: "http://148.148.52.127:15002/v1"
-```
-
-**说明**：README §4.1 指出 vLLM 与本服务"打包于同一镜像"，生产环境中 ASR 服务与 vLLM 在同一容器内，API 地址应为 `http://localhost:15002/v1` 或 `http://127.0.0.1:15002/v1`。当前的硬编码值是开发机地址，两处还不同，容易造成部署事故。
-
-**建议**：默认值改为 `http://localhost:15002/v1`（体现同一容器部署），由 docker-compose 环境变量按需覆盖。
-
----
-
-### 14. 大二进制文件提交到 Git // 忽视
-
-**文件**：`120报警电话16k.wav`（2.6MB）
-
-**问题**：测试用的 WAV 文件直接提交在仓库根目录，长期会增大 Git 历史体积。
-
-**建议**：移到 `test/fixtures/` 目录下，或使用 Git LFS / 外部存储。
-
----
-
-### 15. `client.java` 测试客户端混在项目根目录 // 删掉
+### 9. 删除 `client.java` 测试客户端 `[执行]`
 
 **文件**：`client.java`
 
-**问题**：Java 编写的并发测试客户端放在项目根目录，不属于 Python 服务代码，且包含硬编码的测试 URL。
-
-**建议**：移到 `test/` 目录下的独立子目录。
+Java 编写的并发测试客户端混在 Python 项目根目录，且包含硬编码测试 URL。删除。
 
 ---
 
-### 16. `import json` 散落在函数体内 // TODO 
+### 10. `import json` 移到文件顶部 `[TODO]`
 
 **文件**：`src/api/websocket.py:251, 394`
 
 ```python
 # 第 251 行
 import json as _json
-
 # 第 394 行
 import json
 ```
 
-**建议**：统一移到文件顶部，避免每次调用重复 import（虽然 Python 会缓存，但影响可读性）。
+移到文件顶部，统一为 `import json`。
 
 ---
 
-### 17. README 声称的 `asr_queue_depth` 指标未实现 // 忽略并更改readme，删掉这项指标
+### 11. WebSocket 消息大小无限制 `[TODO]`
 
-**文件**：`src/api/metrics.py`、`README.md:267`
+**文件**：`src/api/websocket.py:91`、`main.py:83-90`
 
-**问题**：README §6.2 将 `asr_queue_depth` 列为关键性能指标（"任务积压队列长度"），但 `metrics.py` 中实际只定义了 4 个指标：
-`asr_connections_current`、`asr_processing_latency_ms`、`asr_segments_total`、`asr_errors_total`。`asr_queue_depth` 和 `asr_error_rate` 都不存在。
-
-**建议**：补全指标或在 README 中移除不存在的 KPI 描述。
-
----
-
-### 18. `setup_logging()` 在模块加载时调用，import 即有副作用 // 忽略
-
-**文件**：`src/core/logging.py:36-46`、`main.py:27`
+客户端可控但防御性加固成本低。在 uvicorn 启动参数中加 `ws_max_size`：
 
 ```python
-# main.py:27 —— 在模块顶层调用
-setup_logging()
-logger = get_logger(__name__)
+uvicorn.run("main:app", ..., ws_max_size=2 * 1024 * 1024)
 ```
 
-**问题**：`setup_logging()` 在 import 阶段执行（`root.handlers.clear()` + 添加 handler），任何 import `main` 模块的操作都会重置全局日志配置。如果将来有测试或脚本在 main 之前初始化了自己的日志 handler，会被静默覆盖。
+---
 
-**建议**：将 `setup_logging()` 移入 `lifespan` 函数内部或 `if __name__ == "__main__"` 块中，确保只在服务实际启动时执行一次。
+### 12. README 移除 `asr_queue_depth` 指标，保留 `asr_error_rate` `[执行]`
+
+**文件**：`README.md:266-268`
+
+**分析**：
+- `asr_queue_depth`：当前未实现，也不需要单独实现（Prometheus 可通过 pending task 数量间接反映）。从 README 中删除。
+- `asr_error_rate`：保留。当前 `asr_errors_total` Counter（带 `error_type` 标签）已覆盖所有 ASR 异常路径（handshake_timeout / internal / asr_inference），包括 vLLM HTTP 错误码（通过 `_process_segment` 的 `except Exception` 分支递增）。在 Prometheus 中通过 `rate(asr_errors_total[5m])` 即可得到错误率。
+
+**操作**：README §6.2 中删除 `asr_queue_depth` 行，保留 `asr_error_rate` 行。
 
 ---
 
