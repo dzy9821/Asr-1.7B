@@ -5,9 +5,9 @@
 
 ---
 
-## P0 — 高优先级（建议尽快修复）
+## P0 — 高优先级（建议尽快修复） // 修改config是为了进行测试
 
-### 0. config.py 默认值与 README 文档严重不一致
+### 0. config.py 默认值与 README 文档严重不一致 
 
 **文件**：`src/core/config.py:14-17` vs `README.md:198-201`
 
@@ -31,11 +31,11 @@ WS_PING_INTERVAL: float = float(os.getenv("WS_PING_INTERVAL", "5"))
 WS_PING_TIMEOUT: float = float(os.getenv("WS_PING_TIMEOUT", "20"))
 ```
 
-同时更新 pyproject.toml 增加 `pydantic-settings` 或从 README 中移除。
+同时更新 pyproject.toml 增加 `pydantic-settings` 或从 README 中移除。 
 
 ---
 
-### 1. VAD `_states` 存在 await 期间的竞态，可导致内存泄漏
+### 1. VAD `_states` 存在 await 期间的竞态，可导致内存泄漏 // TODO
 
 **文件**：`src/services/vad_service.py:171-225`
 
@@ -66,7 +66,7 @@ for i, (sid, future) in enumerate(zip(valid_sids, valid_futures)):
 
 ---
 
-### 2. 连接信号量通过访问 CPython 私有属性实现
+### 2. 连接信号量通过访问 CPython 私有属性实现 //项目运行环境为3.11，检查在3.11中是否有风险
 
 **文件**：`src/api/connection_manager.py:30-37`
 
@@ -93,7 +93,7 @@ def try_acquire(self) -> bool:
 
 ---
 
-### 3. VAD `feed_audio` 中 `np.concatenate` 每次全量拷贝
+### 3. VAD `feed_audio` 中 `np.concatenate` 每次全量拷贝 // 每32ms对已有缓冲区做完整的内存拷贝？不能直接append吗
 
 **文件**：`src/services/vad_service.py:283`
 
@@ -124,7 +124,7 @@ def feed_audio(self, pcm_int16):
 
 ## P1 — 中优先级（建议近期处理）
 
-### 4. `session=None` 的控制流依赖隐性约定
+### 4. `session=None` 的控制流依赖隐性约定 // 期望服务端等待客户端关闭连接
 
 **文件**：`src/api/websocket.py:75-77`
 
@@ -149,7 +149,7 @@ if session is None:
 
 ---
 
-### 5. ITN 多进程池 shutdown 直接 hard kill
+### 5. ITN 多进程池 shutdown 直接 hard kill // ITN进程池如无异常应该只会在服务关闭时关闭吧，深入分析一下
 
 **文件**：`src/services/itn_pool.py:182-184`
 
@@ -175,7 +175,7 @@ self._runtime.pool.join()
 
 ---
 
-### 6. 默认线程池被多处共用，存在资源争用
+### 6. 默认线程池被多处共用，存在资源争用 // vad不是已经放在异步协程做了吗？
 
 **文件**：
 - `src/services/vad_service.py:211` — `asyncio.to_thread(self._raw_model, ...)`
@@ -208,7 +208,7 @@ class SileroVADBatchProcessor:
 
 ---
 
-### 7. 无 WebSocket 消息大小限制
+### 7. 无 WebSocket 消息大小限制 // 客户端会处理
 
 **文件**：`src/api/websocket.py:91`
 
@@ -228,7 +228,7 @@ uvicorn.run("main:app", ..., ws_max_size=2 * 1024 * 1024)  # 2MB 上限
 
 ---
 
-### 8. ASR HTTP 客户端只重试连接错误，不重试 HTTP 错误状态码
+### 8. ASR HTTP 客户端只重试连接错误，不重试 HTTP 错误状态码 // 添加返回客户端错误码的逻辑，但不重试
 
 **文件**：`src/services/asr_service.py:90-109`
 
@@ -249,7 +249,7 @@ except (httpx.ReadError, httpx.ConnectError, httpx.RemoteProtocolError,
 
 ## P2 — 低优先级（技术债务，可在迭代中逐步清理）
 
-### 9. `itn_service.py` 是死代码
+### 9. `itn_service.py` 是死代码 // 删掉已弃用的代码
 
 **文件**：`src/services/itn_service.py`
 
@@ -259,7 +259,7 @@ except (httpx.ReadError, httpx.ConnectError, httpx.RemoteProtocolError,
 
 ---
 
-### 10. `sys.path` 运行时注入
+### 10. `sys.path` 运行时注入 // TODO
 
 **文件**：`src/services/itn_pool.py:61-62`、`src/services/itn_service.py:31-32`
 
@@ -283,7 +283,7 @@ spec.loader.exec_module(itn_module)
 
 ---
 
-### 11. `random.choices` 生成 session ID 存在碰撞风险
+### 11. `random.choices` 生成 session ID 存在碰撞风险 //忽略
 
 **文件**：`src/api/session.py:17-21`
 
@@ -303,7 +303,7 @@ def _generate_sid() -> str:
 
 ---
 
-### 12. Metrics 和连接详情端点无鉴权
+### 12. Metrics 和连接详情端点无鉴权 // 忽视
 
 **文件**：`src/api/metrics.py:35`、`src/api/health.py:30-36`
 
@@ -315,7 +315,7 @@ def _generate_sid() -> str:
 
 ---
 
-### 13. 配置文件硬编码内网 IP（且与 README 不一致）
+### 13. 配置文件硬编码内网 IP（且与 README 不一致）// 忽视
 
 **文件**：`src/core/config.py:23`
 
@@ -330,7 +330,7 @@ VLLM_API_BASE: str = os.getenv("VLLM_API_BASE", "http://10.23.32.171:15002/v1")
 
 ---
 
-### 14. 大二进制文件提交到 Git
+### 14. 大二进制文件提交到 Git // 忽视
 
 **文件**：`120报警电话16k.wav`（2.6MB）
 
@@ -340,7 +340,7 @@ VLLM_API_BASE: str = os.getenv("VLLM_API_BASE", "http://10.23.32.171:15002/v1")
 
 ---
 
-### 15. `client.java` 测试客户端混在项目根目录
+### 15. `client.java` 测试客户端混在项目根目录 // 删掉
 
 **文件**：`client.java`
 
@@ -350,7 +350,7 @@ VLLM_API_BASE: str = os.getenv("VLLM_API_BASE", "http://10.23.32.171:15002/v1")
 
 ---
 
-### 16. `import json` 散落在函数体内
+### 16. `import json` 散落在函数体内 // TODO 
 
 **文件**：`src/api/websocket.py:251, 394`
 
@@ -366,7 +366,7 @@ import json
 
 ---
 
-### 17. README 声称的 `asr_queue_depth` 指标未实现
+### 17. README 声称的 `asr_queue_depth` 指标未实现 // 忽略并更改readme，删掉这项指标
 
 **文件**：`src/api/metrics.py`、`README.md:267`
 
@@ -377,7 +377,7 @@ import json
 
 ---
 
-### 18. `setup_logging()` 在模块加载时调用，import 即有副作用
+### 18. `setup_logging()` 在模块加载时调用，import 即有副作用 // 忽略
 
 **文件**：`src/core/logging.py:36-46`、`main.py:27`
 
