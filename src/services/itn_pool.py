@@ -180,6 +180,11 @@ class ITNPool:
         if self._runtime:
             self._runtime.running.clear()
             try:
+                self._runtime.pool.close()
+                self._runtime.pool.join(timeout=5)
+            except Exception:
+                pass
+            try:
                 self._runtime.pool.terminate()
                 self._runtime.pool.join()
             except Exception:

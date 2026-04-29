@@ -75,6 +75,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         session = await _handle_handshake(websocket)
         if session is None:
             await _wait_for_client_disconnect(websocket)
+            return
 
         # 注册连接
         connection_manager.register(session.sid, session.trace_id)

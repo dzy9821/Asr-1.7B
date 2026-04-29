@@ -104,7 +104,7 @@ def feed_audio(self, pcm_int16):
 
 ## P1 — 中优先级（建议近期处理）
 
-### 3. `session=None` 的控制流依赖隐性约定 `[执行]`
+### 3. ~~`session=None` 的控制流依赖隐性约定~~ ✅ 已完成
 
 **文件**：`src/api/websocket.py:75-77`
 
@@ -129,7 +129,7 @@ if session is None:
 
 ---
 
-### 4. ITN 多进程池 shutdown 直接 hard kill `[执行]`
+### 4. ~~ITN 多进程池 shutdown 直接 hard kill~~ ✅ 已完成
 
 **文件**：`src/services/itn_pool.py:182-184`
 
