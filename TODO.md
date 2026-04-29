@@ -254,7 +254,7 @@ import json
 
 ---
 
-### 12. README 移除 `asr_queue_depth` 指标，保留 `asr_error_rate` `[执行]`
+### 12. ~~README 移除 `asr_queue_depth` 指标，保留 `asr_error_rate`~~ ✅ 已完成
 
 **文件**：`README.md:266-268`
 
@@ -266,7 +266,7 @@ import json
 
 ---
 
-### 13. URL 从 `/tuling/asr/v3` 改为 `/tuling/ast/v3` `[执行]`
+### 13. ~~URL 从 `/tuling/asr/v3` 改为 `/tuling/ast/v3`~~ ✅ 已完成
 
 **文件**：`src/api/websocket.py:59`、`README.md:38, 72`
 
@@ -279,7 +279,7 @@ import json
 
 ---
 
-### 14. 默认端口改为 8856，简化 README 启动命令 `[执行]`
+### 14. ~~默认端口改为 8856，简化 README 启动命令~~ ✅ 已完成
 
 **文件**：`src/core/config.py:13`、`README.md:196, 230, 284, 294`
 

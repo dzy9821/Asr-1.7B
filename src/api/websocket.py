@@ -1,5 +1,5 @@
 """
-WebSocket 端点 /tuling/asr/v3 —— 核心处理逻辑。
+WebSocket 端点 /tuling/ast/v3 —— 核心处理逻辑。
 
 处理流程：
   1. 连接 → 检查并发上限 → 启动握手超时
@@ -57,7 +57,7 @@ asr_service: ASRService = ASRService()
 itn_pool: ITNPool = ITNPool()
 
 
-@router.websocket("/tuling/asr/v3")
+@router.websocket("/tuling/ast/v3")
 async def websocket_endpoint(websocket: WebSocket) -> None:
     """ASR 实时流式转录 WebSocket 端点。"""
 

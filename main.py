@@ -3,7 +3,7 @@ ASR 实时流式转录服务入口。
 
 启动方式（以下两种均可，WS_PING 参数自动从 config.py 读取）：
     python main.py
-    uvicorn main:app --host 0.0.0.0 --port 8000
+    uvicorn main:app --host 0.0.0.0 --port 8856
 """
 
 import os

@@ -10,7 +10,7 @@ class Settings:
 
     # ---- 服务参数 ----
     WS_HOST: str = os.getenv("WS_HOST", "0.0.0.0")
-    WS_PORT: int = int(os.getenv("WS_PORT", "8000"))
+    WS_PORT: int = int(os.getenv("WS_PORT", "8856"))
     MAX_CONNECTIONS: int = int(os.getenv("MAX_CONNECTIONS", "64"))
     HANDSHAKE_TIMEOUT: int = int(os.getenv("HANDSHAKE_TIMEOUT", "5"))
     WS_PING_INTERVAL: float = float(os.getenv("WS_PING_INTERVAL", "5"))

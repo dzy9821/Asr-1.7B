@@ -35,7 +35,7 @@
 
 ### 2.2 数据流详解
 
-1. **连接建立**：客户端连接至 `ws://host:port/tuling/asr/v3`，需在 **5 秒内**完成握手验证。系统最大并发连接数为 **64**。WebSocket 连接依赖底层的 Ping/Pong 机制维持（默认 `ping_interval=5`，`ping_timeout=20`）。
+1. **连接建立**：客户端连接至 `ws://host:port/tuling/ast/v3`，需在 **5 秒内**完成握手验证。系统最大并发连接数为 **64**。WebSocket 连接依赖底层的 Ping/Pong 机制维持（默认 `ping_interval=5`，`ping_timeout=20`）。
 2. **音频接收**：客户端持续发送 Base64 编码的 PCM 音频帧。
 3. **语音活动检测**：VAD 服务实时分析音频流，检测话语结束（Endpoint）时触发回调。Silero VAD 的 `window_size` 固定为 **512 samples（32ms @ 16kHz）**。客户端发送的音频在服务端内部被重新切片为 512-sample 帧后提交至全局批处理器。每个连接持有独立的 `StreamingVADSession` 实例，保证时序状态隔离（状态由批处理器外部管理）。
    - **动态转写触发规则**：停顿等待时间随已收集语音长度线性缩短，具体逻辑如下：
@@ -69,7 +69,7 @@
 
 ## 3. 接口定义（WebSocket API）
 
-- **端点**：`ws(wss)://[ip]:[port]/tuling/asr/v3`
+- **端点**：`ws(wss)://[ip]:[port]/tuling/ast/v3`
 
 ### 3.1 请求参数结构
 
@@ -193,7 +193,7 @@
 
 | 变量名 | 默认值 | 说明 |
 | :--- | :--- | :--- |
-| `WS_HOST` / `WS_PORT` | 0.0.0.0 / 8000 | 服务监听地址与端口。 |
+| `WS_HOST` / `WS_PORT` | 0.0.0.0 / 8856 | 服务监听地址与端口。 |
 | `ITN_WORKERS` | 8 | ITN 多进程池实例数（固定容量设计，`spawn` 模式）。每个进程预加载 `ITNProcessor` 单例。 |
 | `MAX_CONNECTIONS` | 64 | 最大并发 WebSocket 连接数限制，超限时**直接拒绝**新连接（WebSocket close code `1013 Try Again Later`）。 |
 | `HANDSHAKE_TIMEOUT` | 5 | 握手超时时间（秒），连接建立后须在此时间内完成首帧验证。 |
@@ -227,7 +227,7 @@
 pip install -r requirements.txt
 
 # 服务启动
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ws-ping-interval 5 --ws-ping-timeout 20
+python main.py
 
 # Docker 部署
 docker-compose -f docker-compose.yaml up -d
@@ -264,8 +264,7 @@ docker-compose -f docker-compose.yaml up -d
 
 - `asr_connections_current`：实时连接数 Gauge。
 - `asr_processing_latency_ms`：ASR 处理延迟直方图（含 vLLM HTTP 调用耗时）。
-- `asr_queue_depth`：任务积压队列长度。
-- `asr_error_rate`：接口错误率。
+- `asr_error_rate`：接口错误率（由 `asr_errors_total` Counter 经 `rate()` 计算）。
 
 ### 6.3 日志规范
 
@@ -281,7 +280,7 @@ docker-compose -f docker-compose.yaml up -d
 | :--- | :--- |
 | **WebSocket 频繁断开 (1006)** | 高并发下事件循环偶发阻塞，导致 Ping 超时。检查 `WS_PING_TIMEOUT` 配置；ASR 已改为异步后台处理，不再阻塞事件循环。 |
 | **握手超时（5s 断开）** | 检查客户端发送的 JSON 是否包含必填字段 `traceId`、`bizId`，以及 `header.status` 是否正确设为 `0`（握手帧）。 |
-| **模型加载失败** | 执行 `curl http://localhost:8000/api/v1/ready` 查看状态；检查 `weights/` 目录挂载权限；确认 vLLM 容器已正常启动。 |
+| **模型加载失败** | 执行 `curl http://localhost:8856/api/v1/ready` 查看状态；检查 `weights/` 目录挂载权限；确认 vLLM 容器已正常启动。 |
 | **音频识别无结果** | 确认发送音频为 **PCM 16k/16bit** 格式，且 Base64 编码正确；检查 vLLM 服务是否可达（`curl $VLLM_API_BASE/models`）。 |
 | **NPU 显存溢出（OOM）** | vLLM-Ascend 启动参数中调整 `--gpu-memory-utilization`；或降低 `MAX_CONNECTIONS` 以减少并发推理请求数。 |
 | **识别延迟高** | 查看 `asr_queue_depth` 是否持续升高；检查 vLLM 侧延迟；考虑扩容 vLLM 实例或降低并发连接数。 |
@@ -291,7 +290,7 @@ docker-compose -f docker-compose.yaml up -d
 
 ```bash
 export LOG_LEVEL=DEBUG
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --ws-ping-interval 5 --ws-ping-timeout 20
+python main.py
 ```
 
 ---
