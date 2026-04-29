@@ -18,6 +18,7 @@ WebSocket 写入不会交错。结果的 segId 和时间戳是自包含的，客
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -249,8 +250,6 @@ async def _process_segment(
     通过 session.send_lock 保证多个并发任务的 WebSocket 写入互斥。
     始终以 status=1 发送结果，终态 status=2 由 _handle_end_frame 统一发送。
     """
-    import json as _json
-
     t0 = time.monotonic()
     seg_id = session.next_seg_id()
 
@@ -301,7 +300,7 @@ async def _process_segment(
         )
 
         # 在 header.message 中附带耗时 JSON，客户端可解析
-        timing_msg = _json.dumps({
+        timing_msg = json.dumps({
             "asr_ms": round(asr_ms, 1),
             "total_ms": round(total_ms, 1),
         })
@@ -405,6 +404,4 @@ async def _send_error(
             "status": 2,
         },
     }
-    import json
-
     await websocket.send_text(json.dumps(error_resp, ensure_ascii=False))

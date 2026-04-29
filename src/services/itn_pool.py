@@ -52,18 +52,18 @@ def _init_itn_worker(result_queue: Any) -> None:
     global _ITN_PROCESSOR, _RESULT_QUEUE
     _RESULT_QUEUE = result_queue
 
+    import importlib.util
     import os
-    import sys
 
     models_dir = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "..", "models", "itn")
     )
-    if models_dir not in sys.path:
-        sys.path.insert(0, models_dir)
+    wrapper_path = os.path.join(models_dir, "itn_wrapper.py")
+    spec = importlib.util.spec_from_file_location("itn_wrapper", wrapper_path)
+    itn_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(itn_module)
 
-    from itn_wrapper import ITNProcessor  # noqa: E402
-
-    _ITN_PROCESSOR = ITNProcessor()
+    _ITN_PROCESSOR = itn_module.ITNProcessor()
     logger.info(
         "ITN worker process initialized: pid=%d, model_dir=%s",
         mp.current_process().pid,
