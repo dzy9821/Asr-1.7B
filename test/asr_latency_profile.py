@@ -9,7 +9,7 @@ ASR 多并发时延分析测试。
 
 用法：
     python test/asr_latency_profile.py \
-        --url ws://localhost:8000/tuling/asr/v3 \
+        --url ws://localhost:8856/tuling/ast/v3 \
         --audio 120报警电话16k.wav \
         --output asr_latency_report.txt
 
@@ -637,7 +637,7 @@ def main():
         epilog="""
 示例:
   # 默认并发级别 (1,10,20,30,40,50,100,200,500)
-  python test/asr_latency_profile.py --url ws://localhost:8000/tuling/asr/v3
+  python test/asr_latency_profile.py --url ws://localhost:8856/tuling/ast/v3
 
   # 自定义并发级别
   python test/asr_latency_profile.py --levels 1,10,50
@@ -648,8 +648,8 @@ def main():
     )
     parser.add_argument(
         "--url",
-        default="ws://localhost:8000/tuling/asr/v3",
-        help="WebSocket 服务地址 (默认: ws://localhost:8000/tuling/asr/v3)",
+        default="ws://localhost:8856/tuling/ast/v3",
+        help="WebSocket 服务地址 (默认: ws://localhost:8856/tuling/ast/v3)",
     )
     parser.add_argument(
         "--audio",

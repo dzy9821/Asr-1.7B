@@ -24,7 +24,7 @@ VAD 分段策略（动态停顿阈值）：
   分片数量取决于音频内容，不再是固定值。
 
 用法：
-    python test/ws_stress_test.py --url ws://localhost:8000/tuling/asr/v3 \
+    python test/ws_stress_test.py --url ws://localhost:8856/tuling/ast/v3 \
                                   --concurrency 50 \
                                   --audio 120报警电话16k.wav
 """
@@ -620,7 +620,7 @@ def main():
     parser = argparse.ArgumentParser(description="ASR WebSocket 并发压力测试")
     parser.add_argument(
         "--url",
-        default="ws://localhost:8000/tuling/asr/v3",
+        default="ws://localhost:8856/tuling/ast/v3",
         help="WebSocket 服务地址",
     )
     parser.add_argument(
