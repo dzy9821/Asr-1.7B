@@ -146,7 +146,7 @@ def build_hotword_context(hotwords: Optional[str]) -> str:
     """将客户端传入的热词构建为系统提示词。"""
     if not hotwords or not hotwords.strip():
         return ""
-    words = [w.strip() for w in re.split(r"[,\n;，；、]+", hotwords) if w.strip()]
+    words = [w.strip() for w in re.split(r"[,\n;，；、|]+", hotwords) if w.strip()]
     if not words:
         return ""
     return f"热词：{'、'.join(words)}"
