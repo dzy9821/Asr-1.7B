@@ -19,6 +19,14 @@ from src.core.logging import get_logger
 logger = get_logger(__name__)
 
 
+class ASRError(Exception):
+    """ASR 推理异常，携带 vLLM HTTP 状态码。"""
+
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
 class ASRService:
     """异步 ASR 推理服务，封装对 vLLM 的 HTTP 调用。"""
 
@@ -87,7 +95,7 @@ class ASRService:
         if settings.VLLM_API_KEY and settings.VLLM_API_KEY != "EMPTY":
             headers["Authorization"] = f"Bearer {settings.VLLM_API_KEY}"
 
-        # 重试逻辑：vLLM 高并发下可能断连 (ReadError / ConnectError)
+        # 重试逻辑：连接错误重试，HTTP 错误码不重试（避免加剧 vLLM 负载）
         max_retries = 3
         last_exc: Exception | None = None
         for attempt in range(max_retries):
@@ -97,6 +105,11 @@ class ASRService:
                 data = response.json()
                 content = data["choices"][0]["message"]["content"]
                 return _clean_asr_output(content if isinstance(content, str) else str(content))
+            except httpx.HTTPStatusError as exc:
+                raise ASRError(
+                    f"vLLM returned {exc.response.status_code}",
+                    status_code=exc.response.status_code,
+                ) from exc
             except (httpx.ReadError, httpx.ConnectError, httpx.RemoteProtocolError) as exc:
                 last_exc = exc
                 wait = 1.0 * (2 ** attempt)  # 1s, 2s, 4s

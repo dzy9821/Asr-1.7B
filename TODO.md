@@ -174,7 +174,7 @@ words = [w.strip() for w in re.split(r"[,\n;，；、|]+", hotwords) if w.strip(
 
 ---
 
-### 6. ASR HTTP 客户端需向客户端透传 vLLM 错误码 `[执行]`
+### 6. ~~ASR HTTP 客户端需向客户端透传 vLLM 错误码~~ ✅ 已完成
 
 **文件**：`src/services/asr_service.py:90-109`、`src/api/websocket.py:340-351`
 

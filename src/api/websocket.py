@@ -42,7 +42,7 @@ from src.models.schemas import (
     ServerMessage,
     WSItem,
 )
-from src.services.asr_service import ASRService, build_hotword_context
+from src.services.asr_service import ASRError, ASRService, build_hotword_context
 from src.services.itn_pool import ITNPool
 from src.services.vad_service import vad_processor
 from src.utils.audio import decode_base64_pcm, samples_to_cs, samples_to_ms
@@ -340,6 +340,19 @@ async def _process_segment(
         # 不 re-raise：后台任务中的异常不应传播到主循环
     except asyncio.CancelledError:
         logger.debug("ASR task cancelled: sid=%s, seg_id=%d", session.sid, seg_id)
+    except ASRError as exc:
+        logger.error("vLLM error on segment %d: %s", seg_id, exc)
+        asr_errors_total.labels(error_type="asr_inference").inc()
+        try:
+            await session.push_result_in_order(websocket, seg_id, "")
+            async with session.send_lock:
+                await _send_error(
+                    websocket,
+                    session,
+                    f"vLLM returned {exc.status_code}: {exc}",
+                )
+        except Exception:
+            pass
     except Exception as exc:
         logger.exception("Error processing segment %d: %s", seg_id, exc)
         asr_errors_total.labels(error_type="asr_inference").inc()
