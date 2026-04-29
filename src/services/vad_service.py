@@ -212,6 +212,8 @@ class SileroVADBatchProcessor:
 
             # 更新 session 状态并分发结果
             for i, (sid, future) in enumerate(zip(valid_sids, valid_futures)):
+                if sid not in self._states:
+                    continue
                 self._states[sid] = (
                     x[i : i + 1, -SILERO_CONTEXT_SIZE :].clone(),
                     new_states[:, i : i + 1, :].clone(),
@@ -257,8 +259,9 @@ class StreamingVADSession:
         # 注册至全局批处理器
         vad_processor.register_session(sid)
 
-        # 样本缓冲（不足一帧时暂存）
-        self._sample_buffer = np.array([], dtype=np.int16)
+        # 样本缓冲（不足一帧时暂存，chunk list 避免 np.concatenate 全量拷贝）
+        self._chunks: list[np.ndarray] = []
+        self._chunk_total: int = 0
 
         # 当前语音段的帧列表
         self._speech_frames: list[np.ndarray] = []
@@ -280,12 +283,16 @@ class StreamingVADSession:
             触发的语音段列表，每项为
             {"audio": np.ndarray (int16), "start_sample": int, "end_sample": int}
         """
-        self._sample_buffer = np.concatenate([self._sample_buffer, pcm_int16])
+        self._chunks.append(pcm_int16)
+        self._chunk_total += len(pcm_int16)
         segments: list[dict] = []
 
-        while len(self._sample_buffer) >= self.hop_size:
-            frame = self._sample_buffer[: self.hop_size]
-            self._sample_buffer = self._sample_buffer[self.hop_size :]
+        while self._chunk_total >= self.hop_size:
+            buffer = np.concatenate(self._chunks)
+            frame = buffer[: self.hop_size]
+            remainder = buffer[self.hop_size :]
+            self._chunks = [remainder] if len(remainder) > 0 else []
+            self._chunk_total = len(remainder)
 
             result = await self._process_frame(frame)
             if result is not None:
