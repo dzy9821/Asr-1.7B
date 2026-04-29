@@ -1,10 +1,39 @@
 # 风险与待办事项
 
-> 通过代码审查得出，按严重程度分 P0 / P1 / P2 三级，每项附具体文件位置、风险说明和修改建议。
+> 通过代码审查 + README 交叉验证得出，按严重程度分 P0 / P1 / P2 三级。
+> 每项附具体文件位置、风险说明和修改建议。
 
 ---
 
 ## P0 — 高优先级（建议尽快修复）
+
+### 0. config.py 默认值与 README 文档严重不一致
+
+**文件**：`src/core/config.py:14-17` vs `README.md:198-201`
+
+**问题**：代码中实际默认值与 README 声称的默认值有多处冲突，且差异巨大。如果运维按 README 理解行为而不设置环境变量，实际运行参数完全不同。
+
+| 变量 | config.py 默认 | README 默认 | 差异 |
+|------|---------------|------------|------|
+| `MAX_CONNECTIONS` | **600** | **64** | 差 9 倍，拒绝连接的阈值完全不同 |
+| `WS_PING_INTERVAL` | **60** | **5** | 差 12 倍，心跳频率差异极大 |
+| `WS_PING_TIMEOUT` | **300** | **20** | 差 15 倍，断连检测时间完全不同 |
+| `VLLM_API_BASE` | `10.23.32.171:15002` | `148.148.52.127:15002` | 不同内网 IP |
+
+此外 README 明确写道"最大并发连接数为 **64**"，与代码中 600 冲突。README 还列出 `pydantic-settings >=2.0.0` 为依赖，但 `pyproject.toml` 中并没有此项。
+
+**建议**：以 README 的值为准，将 config.py 默认值改为与 README 一致（READEME 是对外文档，应该是经过讨论确认后的准确值）。或者反过来更新 README。**必须统一其中一个方向。**
+
+```python
+# 建议修改 config.py 为与 README 一致：
+MAX_CONNECTIONS: int = int(os.getenv("MAX_CONNECTIONS", "64"))
+WS_PING_INTERVAL: float = float(os.getenv("WS_PING_INTERVAL", "5"))
+WS_PING_TIMEOUT: float = float(os.getenv("WS_PING_TIMEOUT", "20"))
+```
+
+同时更新 pyproject.toml 增加 `pydantic-settings` 或从 README 中移除。
+
+---
 
 ### 1. VAD `_states` 存在 await 期间的竞态，可导致内存泄漏
 
@@ -152,7 +181,9 @@ self._runtime.pool.join()
 - `src/services/vad_service.py:211` — `asyncio.to_thread(self._raw_model, ...)`
 - `src/services/asr_service.py:65` — `loop.run_in_executor(None, _encode_audio, ...)`
 
-**问题**：VAD 模型推理和 ASR 音频编码都使用 Python 默认线程池（`min(32, cpu_count+4)` 个线程）。600 并发连接下，大量 VAD 批推理和 ASR 编码可能争抢同一批线程，导致其中一方等待线程可用。ITN 已经正确隔离了专用线程池（`itn_pool._executor`），但 VAD 侧没有。
+**问题**：VAD 模型推理和 ASR 音频编码都使用 Python 默认线程池（`min(32, cpu_count+4)` 个线程）。当前代码层面 `MAX_CONNECTIONS` 默认 600（README 写 64，见 P0-0），如果实际按 600 运行，大量 VAD 批推理和 ASR 编码可能争抢同一批线程导致延迟。ITN 已经正确隔离了专用线程池（`itn_pool._executor`），但 VAD 侧和 ASR 编码侧没有。
+
+**说明**：如果 `MAX_CONNECTIONS` 实际按 README 的 64 运行，此项风险程度降低，默认线程池容量足够。
 
 **建议**：为 VAD 批处理器分配专用线程池：
 
@@ -278,19 +309,24 @@ def _generate_sid() -> str:
 
 **问题**：`/metrics` 和 `/api/v1/connections` 对外暴露，没有任何认证机制。`/connections` 直接返回所有活跃连接的 `sid → trace_id` 映射，可能泄露业务信息。
 
-**建议**：至少对 `/connections` 增加简单的鉴权，或拆分为内部端口（如 9090）独立暴露 metrics/health 端点。
+**说明**：README §6.1 表明这些端点用于 K8s Probes 和 Prometheus 抓取，属于基础设施内部用途。如果部署时通过 Service/Ingress 限制外部访问，此项风险降低。但仍建议在代码层面增加保护。
+
+**建议**：拆分端口（8000 对外 WebSocket + 9090 对内 metrics/health），或至少对 `/connections` 做简单鉴权。
 
 ---
 
-### 13. 配置文件硬编码内网 IP
+### 13. 配置文件硬编码内网 IP（且与 README 不一致）
 
 **文件**：`src/core/config.py:23`
 
 ```python
 VLLM_API_BASE: str = os.getenv("VLLM_API_BASE", "http://10.23.32.171:15002/v1")
+# README 写的却是: "http://148.148.52.127:15002/v1"
 ```
 
-**建议**：默认值改为空字符串或占位符，强制部署时通过环境变量显式设置。
+**说明**：README §4.1 指出 vLLM 与本服务"打包于同一镜像"，生产环境中 ASR 服务与 vLLM 在同一容器内，API 地址应为 `http://localhost:15002/v1` 或 `http://127.0.0.1:15002/v1`。当前的硬编码值是开发机地址，两处还不同，容易造成部署事故。
+
+**建议**：默认值改为 `http://localhost:15002/v1`（体现同一容器部署），由 docker-compose 环境变量按需覆盖。
 
 ---
 
@@ -327,6 +363,33 @@ import json
 ```
 
 **建议**：统一移到文件顶部，避免每次调用重复 import（虽然 Python 会缓存，但影响可读性）。
+
+---
+
+### 17. README 声称的 `asr_queue_depth` 指标未实现
+
+**文件**：`src/api/metrics.py`、`README.md:267`
+
+**问题**：README §6.2 将 `asr_queue_depth` 列为关键性能指标（"任务积压队列长度"），但 `metrics.py` 中实际只定义了 4 个指标：
+`asr_connections_current`、`asr_processing_latency_ms`、`asr_segments_total`、`asr_errors_total`。`asr_queue_depth` 和 `asr_error_rate` 都不存在。
+
+**建议**：补全指标或在 README 中移除不存在的 KPI 描述。
+
+---
+
+### 18. `setup_logging()` 在模块加载时调用，import 即有副作用
+
+**文件**：`src/core/logging.py:36-46`、`main.py:27`
+
+```python
+# main.py:27 —— 在模块顶层调用
+setup_logging()
+logger = get_logger(__name__)
+```
+
+**问题**：`setup_logging()` 在 import 阶段执行（`root.handlers.clear()` + 添加 handler），任何 import `main` 模块的操作都会重置全局日志配置。如果将来有测试或脚本在 main 之前初始化了自己的日志 handler，会被静默覆盖。
+
+**建议**：将 `setup_logging()` 移入 `lifespan` 函数内部或 `if __name__ == "__main__"` 块中，确保只在服务实际启动时执行一次。
 
 ---
 
