@@ -38,7 +38,7 @@ class Settings:
 
     # ---- ASR 音频填充 ----
     ASR_PAD_FRAMES: int = int(os.getenv("ASR_PAD_FRAMES", "5"))
-    """送给 ASR 时首尾各填充的静默帧数（帧长 = VAD_HOP_SIZE samples）。"""
+    """送给 ASR 时首尾各附加的真实音频上下文帧数（帧长 = VAD_HOP_SIZE samples），替代静默填充。"""
 
     # ---- VAD 动态断句阈值 ----
     VAD_HOP_SIZE: int = int(os.getenv("VAD_HOP_SIZE", "640"))

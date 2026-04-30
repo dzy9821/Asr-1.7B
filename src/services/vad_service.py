@@ -62,15 +62,22 @@ class TenVADSession:
         self.hop_size = HOP_SIZE
         self.frame_duration = self.hop_size / SAMPLE_RATE  # 秒
 
+        self._pad_frames = settings.ASR_PAD_FRAMES
+
         # 样本缓冲（不足一帧时暂存）
         self._chunks: list[np.ndarray] = []
         self._chunk_total: int = 0
+
+        # 滑动窗口：始终保留最近 N 帧，用于语音开始时作为前导上下文
+        self._pre_buffer: list[np.ndarray] = []
+        self._pre_snapshot: list[np.ndarray] = []
 
         # 当前语音段的帧列表
         self._speech_frames: list[np.ndarray] = []
         self._in_speech = False
         self._speech_frame_count = 0
         self._silence_frame_count = 0
+        self._post_count = 0  # 已捕获的后置帧数
 
         # 全局采样计数
         self._total_samples: int = 0
@@ -113,6 +120,11 @@ class TenVADSession:
             self._reset()
             return None
 
+        # 后置尾帧：取 pre_buffer 中最近的帧作为上下文（flush 时无后续静默帧可捕获）
+        if self._post_count < self._pad_frames and self._pre_buffer:
+            needed = self._pad_frames - self._post_count
+            self._speech_frames.extend(self._pre_buffer[-needed:])
+
         return self._extract_and_reset()
 
     def close(self) -> None:
@@ -129,18 +141,33 @@ class TenVADSession:
         self._total_samples += self.hop_size
         flag = int(flag_i)
 
+        # 维护前导帧滑动窗口（保留最近 N 帧真实音频）
+        self._pre_buffer.append(frame)
+        while len(self._pre_buffer) > self._pad_frames:
+            self._pre_buffer.pop(0)
+
         if flag == 1:  # 语音
             if not self._in_speech:
                 self._in_speech = True
-                self._silence_frame_count = 0
+                self._pre_snapshot = list(self._pre_buffer)  # 快照前导真实音频
                 self._speech_frame_count = 0
-                self._speech_start_sample = self._total_samples - self.hop_size
+                self._silence_frame_count = 0
+                self._post_count = 0
+                self._speech_start_sample = (
+                    self._total_samples - self.hop_size
+                    - len(self._pre_snapshot) * self.hop_size
+                )
             self._speech_frame_count += 1
             self._silence_frame_count = 0
             self._speech_frames.append(frame)
         else:  # 静默
             if self._in_speech:
                 self._silence_frame_count += 1
+
+                # 捕获后置真实尾帧（前 N 个静默帧拼入语音段作为上下文）
+                if self._post_count < self._pad_frames:
+                    self._speech_frames.append(frame)
+                    self._post_count += 1
 
                 speech_dur = self._speech_frame_count * self.frame_duration
                 pause_dur = self._silence_frame_count * self.frame_duration
@@ -157,7 +184,8 @@ class TenVADSession:
         return None
 
     def _extract_and_reset(self) -> dict:
-        audio = np.concatenate(self._speech_frames)
+        all_frames = self._pre_snapshot + self._speech_frames
+        audio = np.concatenate(all_frames)
         start = self._speech_start_sample
         end = start + len(audio)
         self._reset()
@@ -165,9 +193,11 @@ class TenVADSession:
 
     def _reset(self) -> None:
         self._speech_frames = []
+        self._pre_snapshot = []
         self._in_speech = False
         self._speech_frame_count = 0
         self._silence_frame_count = 0
+        self._post_count = 0
 
 
 # ---- 动态阈值判定（独立函数，方便单元测试） ----

@@ -266,12 +266,6 @@ async def _process_segment(
     start_sample = seg["start_sample"]
     end_sample = seg["end_sample"]
 
-    # 首尾各填充静默帧，减少 ASR 边界字符识别误差
-    pad_frames = settings.ASR_PAD_FRAMES
-    if pad_frames > 0:
-        silence = np.zeros(pad_frames * settings.VAD_HOP_SIZE, dtype=np.int16)
-        audio_int16 = np.concatenate([silence, audio_int16, silence])
-
     try:
         # ASR 推理（单独计时）
         t_asr_start = time.monotonic()
