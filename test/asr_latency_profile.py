@@ -204,20 +204,25 @@ async def _run_connection(
                             except (json.JSONDecodeError, TypeError):
                                 pass
 
-                        seg = SegmentTiming(
-                            conn_id=conn_id,
-                            seg_id=res.get("segId", -1),
-                            bg_ms=res.get("bg", 0),
-                            ed_ms=res.get("ed", 0),
-                            text=_extract_text(res),
-                            status=header.get("status", -1),
-                            asr_ms=asr_ms,
-                            total_ms=total_ms,
-                            recv_time=t_recv,
-                        )
-                        ct.segments.append(seg)
+                        is_final = header.get("status") == 2
+                        text = _extract_text(res)
 
-                        if header.get("status") == 2:
+                        # 纯信号帧（status=2 且无文本）不创建分段记录
+                        if not is_final or text:
+                            seg = SegmentTiming(
+                                conn_id=conn_id,
+                                seg_id=res.get("segId", -1),
+                                bg_ms=res.get("bg", 0),
+                                ed_ms=res.get("ed", 0),
+                                text=text,
+                                status=header.get("status", -1),
+                                asr_ms=asr_ms,
+                                total_ms=total_ms,
+                                recv_time=t_recv,
+                            )
+                            ct.segments.append(seg)
+
+                        if is_final:
                             ct.t_final_result = t_recv
                             recv_done.set()
                             return
