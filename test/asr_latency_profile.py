@@ -527,10 +527,9 @@ def generate_full_report(
         for c in ok:
             for s in c.segments:
                 rtf_str = f"{s.asr_rtf:.3f}" if s.asr_rtf > 0 else "N/A"
-                text_preview = s.text[:30] + "..." if len(s.text) > 30 else s.text
                 L(f"  conn{c.conn_id:>3} | {s.seg_id:>4} | {s.bg_ms:>8} | {s.ed_ms:>8} | "
                   f"{s.audio_duration_ms:>8.0f} | {s.asr_ms:>9.1f} | {s.total_ms:>10.1f} | "
-                  f"{rtf_str:>8} | {text_preview}")
+                  f"{rtf_str:>8} | {s.text}")
 
         L("")
 
