@@ -141,7 +141,11 @@ class TenVADSession:
         self._total_samples += self.hop_size
         flag = int(flag_i)
 
-        # 维护前导帧滑动窗口（保留最近 N 帧真实音频）
+        # 语音开始时，先快照当前 pre_buffer 作为前导上下文（不含本帧）
+        if flag == 1 and not self._in_speech:
+            self._pre_snapshot = list(self._pre_buffer)
+
+        # 维护前导帧滑动窗口（追加本帧后再限长）
         self._pre_buffer.append(frame)
         while len(self._pre_buffer) > self._pad_frames:
             self._pre_buffer.pop(0)
@@ -149,7 +153,6 @@ class TenVADSession:
         if flag == 1:  # 语音
             if not self._in_speech:
                 self._in_speech = True
-                self._pre_snapshot = list(self._pre_buffer)  # 快照前导真实音频
                 self._speech_frame_count = 0
                 self._silence_frame_count = 0
                 self._post_count = 0
