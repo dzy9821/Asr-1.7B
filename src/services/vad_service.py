@@ -4,7 +4,7 @@
 架构：
   - 每个 WebSocket 连接持有独立的 TenVad 实例（hop_size=640=40ms@16kHz）
   - process() 为同步调用、CPU 极轻（RTF ~0.01），通过 asyncio.to_thread 避免阻塞
-  - 动态阈值断句状态机与 Silero 版本完全一致
+  - 动态阈值断句状态机与旧版 VAD 完全一致
 """
 
 from __future__ import annotations
@@ -120,11 +120,8 @@ class TenVADSession:
             self._reset()
             return None
 
-        # 后置尾帧：取 pre_buffer 中最近的帧作为上下文（flush 时无后续静默帧可捕获）
-        if self._post_count < self._pad_frames and self._pre_buffer:
-            needed = self._pad_frames - self._post_count
-            self._speech_frames.extend(self._pre_buffer[-needed:])
-
+        # 后置尾帧已在正常流程中通过 post_count 逐帧捕获，
+        # flush 时 pre_buffer 与 speech_frames 尾部必然重叠，不再补充。
         return self._extract_and_reset()
 
     def close(self) -> None:

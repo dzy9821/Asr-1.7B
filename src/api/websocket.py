@@ -207,21 +207,26 @@ async def _handle_end_frame(websocket: WebSocket, session: ASRSession) -> None:
     """处理结束帧：刷空 VAD 缓冲区，等待所有 ASR 任务完成，推送终态。"""
     session.set_closing()
 
-    # 强制刷出残余音频（如有，也作为后台任务处理）
+    # 强制刷出残余音频（如有，标记为 final，与 status=2 捆绑发送）
     seg = session.vad.flush()
     if seg is not None:
         task = asyncio.create_task(
-            _process_segment(websocket, session, seg)
+            _process_segment(websocket, session, seg, is_final=True)
         )
         session.track_asr_task(task)
 
     # 等待所有后台 ASR 任务完成，确保结果全部推送后再发终态
     await session.wait_pending_asr()
 
-    # 发送终态信号 (status=2)
+    # 发送终态 (status=2)，flush 段文本一并携带
     last_seg_id = max(0, session.seg_id - 1)
     async with session.send_lock:
-        await _send_response(websocket, session, status=2, seg_id=last_seg_id)
+        if session._final_result_json is not None:
+            data = json.loads(session._final_result_json)
+            data["header"]["status"] = 2
+            await websocket.send_text(json.dumps(data, ensure_ascii=False))
+        else:
+            await _send_response(websocket, session, status=2, seg_id=last_seg_id)
 
 
 async def _wait_for_client_disconnect(
@@ -252,12 +257,14 @@ async def _process_segment(
     websocket: WebSocket,
     session: ASRSession,
     seg: dict,
+    is_final: bool = False,
 ) -> None:
     """对一个语音段执行 ASR → ITN → 推送结果（后台任务）。
 
     此函数作为 asyncio.Task 在后台运行，不阻塞主循环的音频接收。
     通过 session.send_lock 保证多个并发任务的 WebSocket 写入互斥。
-    始终以 status=1 发送结果，终态 status=2 由 _handle_end_frame 统一发送。
+    常规段以 status=1 发送；is_final=True 的 flush 段暂存至 session，
+    由 _handle_end_frame 改写为 status=2 后与终态一起发送。
     """
     t0 = time.monotonic()
     seg_id = session.next_seg_id()
@@ -325,8 +332,12 @@ async def _process_segment(
             payload=ResponsePayloadWrapper(result=result),
         )
 
-        # 通过 push_result_in_order 保证结果按 segId 顺序到达客户端
-        await session.push_result_in_order(websocket, seg_id, response.model_dump_json())
+        if is_final:
+            # 暂存完整 JSON，推进序号但不发送，后续由 _handle_end_frame 以 status=2 发送
+            session._final_result_json = response.model_dump_json()
+            await session.push_result_in_order(websocket, seg_id, "")
+        else:
+            await session.push_result_in_order(websocket, seg_id, response.model_dump_json())
 
         asr_processing_latency_ms.observe(total_ms)
         asr_segments_total.inc()

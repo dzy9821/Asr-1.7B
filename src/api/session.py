@@ -69,6 +69,7 @@ class ASRSession:
         # ---- 结果顺序保证 ----
         self._next_send_seg_id: int = 0
         self._result_buffer: dict[int, str] = {}
+        self._final_result_json: str | None = None  # flush 段暂存，与 status=2 捆绑发送
 
     async def push_result_in_order(self, websocket, seg_id: int, response_json: str) -> None:
         """保证按 seg_id 顺序推送结果，解决短句先于长句返回导致的乱序问题。"""

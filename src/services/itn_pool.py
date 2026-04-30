@@ -12,7 +12,6 @@ ITN 多进程池 —— 基于 multiprocessing.Pool (spawn) 的生产实现。
   - 应用启动时调用 start()，预创建所有进程并预热 ITN 模型（eager init）
   - 应用关闭时调用 shutdown()，终止所有进程
 
-参考：test/test_vad_itn_performance.py（测试 4、5）
 """
 
 from __future__ import annotations
