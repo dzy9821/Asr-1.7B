@@ -36,7 +36,7 @@
 ### 2.2 数据流详解
 
 1. **连接建立**：客户端连接至 `ws://host:port/tuling/ast/v3`，需在 **5 秒内**完成握手验证。系统最大并发连接数为 **64**。WebSocket 连接依赖底层的 Ping/Pong 机制维持（默认 `ping_interval=5`，`ping_timeout=20`）。
-2. **音频接收**：客户端持续发送 Base64 编码的 PCM 音频帧。
+2. **音频接收**：客户端持续发送 Base64 编码的音频帧。支持两种编码格式：PCM 16k/16bit（默认）和 Opus。Opus 格式音频由服务端实时解码为 PCM 后送入后续管线。
 3. **语音活动检测**：VAD 服务实时分析音频流，检测话语结束（Endpoint）时触发回调。Silero VAD 的 `window_size` 固定为 **512 samples（32ms @ 16kHz）**。客户端发送的音频在服务端内部被重新切片为 512-sample 帧后提交至全局批处理器。每个连接持有独立的 `StreamingVADSession` 实例，保证时序状态隔离（状态由批处理器外部管理）。
    - **动态转写触发规则**：停顿等待时间随已收集语音长度线性缩短，具体逻辑如下：
      - **短音频抑制**：语音时长 `< 0.5s`，视为噪声或误触，不触发（继续等待）。
@@ -85,7 +85,8 @@
     },
     "payload": {
         "audio": {
-            "audio": "JiuY3iK9AAB..."
+            "audio": "JiuY3iK9AAB...",
+            "encoding": null
         },
         "text": {
             "text": "张三疯"
@@ -103,7 +104,8 @@
 | `header.bizId` | String | **是** | 业务唯一标识，通常对应用户 ID。 |
 | `header.status` | Int | **是** | **客户端帧类型**：`0` 握手帧（首帧）；`1` 音频数据帧；`2` 结束帧。 |
 | `header.resIdList` | List[String] | 否 | 多用户场景下的辅助 ID 列表。 |
-| `payload.audio.audio` | String | **是** | Base64 编码的音频数据（PCM 16k/16bit 格式）。 |
+| `payload.audio.audio` | String | **是** | Base64 编码的音频数据。 |
+| `payload.audio.encoding` | String | 否 | 音频编码格式。不传或 `null` 时按 PCM 16k/16bit 处理；`"opus"` 时按 Opus 编码处理，服务端先解码为 PCM 再送入管线。 |
 | `payload.text.text` | String | 否 | 用于提升识别准确率的热词，将在服务端以提示词拼接方式注入 ASR 推理。 |
 
 ### 3.2 响应结果结构
@@ -281,7 +283,7 @@ docker-compose -f docker-compose.yaml up -d
 | **WebSocket 频繁断开 (1006)** | 高并发下事件循环偶发阻塞，导致 Ping 超时。检查 `WS_PING_TIMEOUT` 配置；ASR 已改为异步后台处理，不再阻塞事件循环。 |
 | **握手超时（5s 断开）** | 检查客户端发送的 JSON 是否包含必填字段 `traceId`、`bizId`，以及 `header.status` 是否正确设为 `0`（握手帧）。 |
 | **模型加载失败** | 执行 `curl http://localhost:8856/api/v1/ready` 查看状态；检查 `weights/` 目录挂载权限；确认 vLLM 容器已正常启动。 |
-| **音频识别无结果** | 确认发送音频为 **PCM 16k/16bit** 格式，且 Base64 编码正确；检查 vLLM 服务是否可达（`curl $VLLM_API_BASE/models`）。 |
+| **音频识别无结果** | 确认发送音频格式正确（PCM 16k/16bit 或 Opus 16k/单声道），`encoding` 字段与实际格式一致，且 Base64 编码正确；检查 vLLM 服务是否可达（`curl $VLLM_API_BASE/models`）。 |
 | **NPU 显存溢出（OOM）** | vLLM-Ascend 启动参数中调整 `--gpu-memory-utilization`；或降低 `MAX_CONNECTIONS` 以减少并发推理请求数。 |
 | **识别延迟高** | 查看 `asr_queue_depth` 是否持续升高；检查 vLLM 侧延迟；考虑扩容 vLLM 实例或降低并发连接数。 |
 | **ITN 进程池启动慢** | 使用 `spawn` 模式的多进程池启动较慢属正常现象（需序列化并重新加载模型）。启动期间服务不可用，Readiness Probe 会返回 `not_ready`。 |
