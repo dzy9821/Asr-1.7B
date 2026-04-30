@@ -36,6 +36,10 @@ class Settings:
         os.getenv("MP_QUEUE_LOG_INTERVAL_SEC", "10")
     )
 
+    # ---- ASR 音频填充 ----
+    ASR_PAD_FRAMES: int = int(os.getenv("ASR_PAD_FRAMES", "5"))
+    """送给 ASR 时首尾各填充的静默帧数（每帧 512 samples = 32ms@16kHz）。"""
+
     # ---- VAD 动态断句阈值 ----
     VAD_PAUSE_MAX: float = float(os.getenv("VAD_PAUSE_MAX", "1.0"))
     """累积语音 0s 时所需停顿（秒）。"""

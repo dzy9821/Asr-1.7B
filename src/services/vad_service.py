@@ -342,7 +342,6 @@ class StreamingVADSession:
             self._speech_frames.append(frame)
         else:  # 静默
             if self._in_speech:
-                self._speech_frames.append(frame)
                 self._silence_frame_count += 1
 
                 speech_dur = self._speech_frame_count * self.frame_duration

@@ -21,6 +21,7 @@ import asyncio
 import json
 import time
 
+import numpy as np
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from uvicorn.protocols.utils import ClientDisconnected
 
@@ -256,6 +257,12 @@ async def _process_segment(
     audio_int16 = seg["audio"]
     start_sample = seg["start_sample"]
     end_sample = seg["end_sample"]
+
+    # 首尾各填充静默帧，减少 ASR 边界字符识别误差
+    pad_frames = settings.ASR_PAD_FRAMES
+    if pad_frames > 0:
+        silence = np.zeros(pad_frames * 512, dtype=np.int16)
+        audio_int16 = np.concatenate([silence, audio_int16, silence])
 
     try:
         # ASR 推理（单独计时）
