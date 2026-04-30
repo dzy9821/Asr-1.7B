@@ -20,7 +20,7 @@ os.environ.setdefault("UVICORN_WS_PING_TIMEOUT", str(int(settings.WS_PING_TIMEOU
 
 from src.api.health import router as health_router
 from src.api.metrics import router as metrics_router
-from src.api.websocket import asr_service, itn_pool, vad_processor, router as ws_router
+from src.api.websocket import asr_service, itn_pool, router as ws_router
 from src.core.logging import get_logger, setup_logging
 
 setup_logging()
@@ -40,10 +40,7 @@ async def lifespan(app: FastAPI):
         settings.WS_PING_TIMEOUT,
     )
 
-    # Silero VAD 批处理器（eager init + 启动后台循环）
-    vad_processor.load_model()
-    await vad_processor.start()
-    logger.info("Silero VAD batch processor ready")
+    # TEN-VAD 为每连接独立实例，无需全局初始化
 
     # ITN 多进程池（eager init）
     itn_pool.start()
@@ -59,7 +56,6 @@ async def lifespan(app: FastAPI):
     # ---- 关闭 ----
     logger.info("Shutting down ASR service...")
     await asr_service.shutdown()
-    await vad_processor.stop()
     itn_pool.shutdown()
     logger.info("Shutdown complete")
 

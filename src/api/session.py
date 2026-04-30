@@ -11,7 +11,7 @@ import string
 
 from src.core.config import settings
 from src.services.asr_service import build_hotword_context
-from src.services.vad_service import StreamingVADSession
+from src.services.vad_service import TenVADSession
 from src.utils.audio import OpusDecoder
 
 
@@ -33,8 +33,8 @@ class ASRSession:
     单个 WebSocket 连接的会话上下文。
 
     维护段序号、时间偏移、热词等。
-    每个 Session 持有独立的 StreamingVADSession 实例，连接创建时初始化，
-    连接关闭时通过 close() 方法显式注销。
+    每个 Session 持有独立的 TenVADSession 实例，连接创建时初始化，
+    连接关闭时通过 close() 方法显式释放。
 
     ASR 推理采用异步后台任务模式：VAD 触发断句后，ASR+ITN 处理通过
     asyncio.create_task() 在后台执行，不阻塞音频帧的持续接收与 VAD 处理。
@@ -54,8 +54,8 @@ class ASRSession:
         # 热词上下文（默认从环境变量 HOTWORDS 读取，客户端可追加）
         self.hotword_context: str = build_hotword_context(settings.HOTWORDS)
 
-        # 每连接独立的 VAD 会话（注册至全局批处理器）
-        self.vad: StreamingVADSession = StreamingVADSession(sid=self.sid)
+        # 每连接独立的 VAD 会话
+        self.vad: TenVADSession = TenVADSession(sid=self.sid)
 
         # Opus 解码器（延迟创建，仅 encoding=opus 的连接需要）
         self._opus_decoder: OpusDecoder | None = None

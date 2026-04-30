@@ -46,7 +46,6 @@ from src.models.schemas import (
 )
 from src.services.asr_service import ASRError, ASRService, build_hotword_context
 from src.services.itn_pool import ITNPool
-from src.services.vad_service import vad_processor
 from src.utils.audio import decode_base64_opus, decode_base64_pcm, samples_to_cs, samples_to_ms
 
 logger = get_logger(__name__)
@@ -270,7 +269,7 @@ async def _process_segment(
     # 首尾各填充静默帧，减少 ASR 边界字符识别误差
     pad_frames = settings.ASR_PAD_FRAMES
     if pad_frames > 0:
-        silence = np.zeros(pad_frames * 512, dtype=np.int16)
+        silence = np.zeros(pad_frames * settings.VAD_HOP_SIZE, dtype=np.int16)
         audio_int16 = np.concatenate([silence, audio_int16, silence])
 
     try:

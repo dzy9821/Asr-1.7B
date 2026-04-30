@@ -8,7 +8,7 @@
 
 | 组件 | 模型/引擎 | 推理设备 | 说明 |
 | :--- | :--- | :--- | :--- |
-| **VAD** | Silero VAD (v5, JIT) | CPU | 检测语音活动端点，实现精准断句；基于 PyTorch JIT 模型，支持 **动态批处理**（单实例同时服务所有并发连接）。 |
+| **VAD** | TEN-VAD | CPU | 检测语音活动端点，实现精准断句；基于 C 原生库（libten_vad.so），每连接独立实例，RTF ~0.01，极低资源消耗。 |
 | **ASR** | Qwen/Qwen3-ASR-1.7B | **Ascend NPU** | 核心语音识别模型，基于 **vLLM-Ascend v0.18** 高性能推理；vLLM 服务与本推理服务共同打包进同一镜像，对外暴露 OpenAI 兼容 RESTful API，本服务通过 HTTP 调用该接口完成推理。 |
 | **ITN** | fst_itn_zh | CPU | 逆文本正则化，如将"幺幺零"转换为"110"；依赖 Python 包 `WeTextProcessing`，需在镜像内安装。 |
 
@@ -28,7 +28,7 @@
 **并发与隔离策略**：
 
 - **异步 I/O**：WebSocket 连接处理使用 `asyncio` 支持高并发长连接。
-- **VAD 动态批处理**：采用 Silero VAD **全局单实例 + 动态批处理** 架构。服务启动时加载一个 Silero JIT 模型（`SileroVADBatchProcessor` 全局单例），每个连接的时序状态（RNN context + hidden state）在服务端外部管理。后台 asyncio Task 从队列中收集多个连接的帧请求，凑批后统一执行一次 batch forward，再将概率结果分发给各连接。经压测验证，单实例 + batch_size=256 可在实时约束内服务 **500 路并发**（RTF < 1.0）。每个连接持有独立的 `StreamingVADSession`，负责帧缓冲与动态阈值断句逻辑。
+- **VAD 每连接独立实例**：采用 TEN-VAD **每连接独立实例** 架构。每个 WebSocket 连接创建独立的 `TenVad` 实例（hop_size=640=40ms@16kHz），`process()` 同步调用极轻（RTF ~0.01），通过 `asyncio.to_thread` 执行以避免阻塞事件循环。原生 C 库体积仅 ~306KB，无需 PyTorch，无需批处理调度。每个连接持有独立的 `TenVADSession`，负责帧缓冲与动态阈值断句逻辑。
 - **ASR 异步后台处理**：VAD 触发断句后，ASR+ITN 推理通过 `asyncio.create_task()` 在后台异步执行，**不阻塞**音频帧的持续接收与 VAD 处理。后台任务完成时，将结果放入按 `segId` 排序的**缓冲队列**中，确保长短句并发时**推送顺序绝对递增**，解决乱序问题。最后通过 `asyncio.Lock` 保证并发写入 WebSocket 安全。客户端发送结束帧（status=2）后，服务端会等待所有后台任务完成，再发送终态响应。
 - **ITN 多进程池**：ITN 采用固定 **8 个多进程实例**（`spawn` 模式），请求通过 Pool 内部队列自动负载均衡分发。每个进程预加载 `ITNProcessor` 单例，避免 GIL 限制下的 CPU 密集型 FST 计算瓶颈。结果通过 `Manager().Queue()` 跨进程安全回传。服务启动时 **eager init** 所有进程并预热模型。
 - **vLLM 服务化**：ASR 推理由独立容器内的 vLLM 服务承载，本服务通过 OpenAI 兼容 RESTful API 与其通信，vLLM 进程常驻，无需每次请求重启。
@@ -37,7 +37,7 @@
 
 1. **连接建立**：客户端连接至 `ws://host:port/tuling/ast/v3`，需在 **5 秒内**完成握手验证。系统最大并发连接数为 **64**。WebSocket 连接依赖底层的 Ping/Pong 机制维持（默认 `ping_interval=5`，`ping_timeout=20`）。
 2. **音频接收**：客户端持续发送 Base64 编码的音频帧。支持两种编码格式：PCM 16k/16bit（默认）和 Opus。Opus 格式音频由服务端实时解码为 PCM 后送入后续管线。
-3. **语音活动检测**：VAD 服务实时分析音频流，检测话语结束（Endpoint）时触发回调。Silero VAD 的 `window_size` 固定为 **512 samples（32ms @ 16kHz）**。客户端发送的音频在服务端内部被重新切片为 512-sample 帧后提交至全局批处理器。每个连接持有独立的 `StreamingVADSession` 实例，保证时序状态隔离（状态由批处理器外部管理）。
+3. **语音活动检测**：VAD 服务实时分析音频流，检测话语结束（Endpoint）时触发回调。TEN-VAD 的 `hop_size` 固定为 **640 samples（40ms @ 16kHz）**，对齐客户端每 40ms 的发送间隔。客户端发送的音频在服务端内部被重新切片为 640-sample 帧后直接送入本连接的 `TenVad` 实例推理。每个连接持有独立的 `TenVADSession` 实例，包含独立 `TenVad` 引擎和断句状态机。
    - **动态转写触发规则**：停顿等待时间随已收集语音长度线性缩短，具体逻辑如下：
      - **短音频抑制**：语音时长 `< 0.5s`，视为噪声或误触，不触发（继续等待）。
      - **长音频强制触发**：语音时长 `>= 30.0s`，无论停顿多久立即触发，防止缓冲区堆积（即转发给 ASR 的语音最长为 30 秒）。
@@ -166,7 +166,7 @@
 - **Web 框架**：FastAPI + websockets ^12.0
 - **推理引擎**：**vLLM-Ascend v0.18**（与本推理服务打包于同一镜像，提供 OpenAI 兼容 API）
 - **数据处理**：NumPy ==1.26.4
-- **VAD 推理**：PyTorch >=2.0.0 + torchaudio >=2.0.0（Silero VAD JIT 模型依赖）
+- **VAD 推理**：TEN-VAD 原生 C 库（libten_vad.so），通过 ctypes 调用，无需 GPU 或额外 ML 框架
 - **数据校验**：Pydantic >=2.5.0 + pydantic-settings >=2.0.0
 - **服务器**：Uvicorn（Standard）
 - **可观测性**：prometheus-client
@@ -175,7 +175,7 @@
 
 | 组件 | 依赖 | 安装方式 | 说明 |
 | :--- | :--- | :--- | :--- |
-| **VAD** | Silero VAD JIT 模型 (`silero_vad.jit`) | 已包含在项目 `models/vad/silero-vad/` 目录 | 基于 PyTorch JIT 的 VAD 模型，通过 `torch.hub.load(source='local')` 加载，无需额外安装原生库 |
+| **VAD** | TEN-VAD 原生库 (`libten_vad.so`) | 已包含在项目 `models/vad/ten-vad/` 目录 | 基于 C 原生代码的 VAD 引擎，通过 ctypes 加载调用，无需额外安装 |
 | **ITN** | `WeTextProcessing` | `pip install 'git+https://github.com/wenet-e2e/WeTextProcessing.git'` | 提供 `itn.chinese.inverse_normalizer.InverseNormalizer` |
 
 ### 4.3 开发与质量保障工具
@@ -208,6 +208,8 @@
 | `ASCEND_RT_VISIBLE_DEVICES` | 0 | 本服务可见的 Ascend NPU 设备 ID（由 vLLM-Ascend 使用）。 |
 | `HOTWORDS` | （空） | 服务端默认热词列表，逗号分隔（如 `张三丰,武当山,太极拳`）。客户端传入的热词会追加合并。 |
 | `LOG_LEVEL` | INFO | 日志输出级别（DEBUG 用于排查）。 |
+| `VAD_HOP_SIZE` | 640 | TEN-VAD 帧长（采样数），16kHz 下 640 = 40ms。 |
+| `VAD_THRESHOLD` | 0.5 | TEN-VAD 语音概率阈值 [0.0, 1.0]，>= 此值判定为语音帧。 |
 | `VAD_PAUSE_MAX` | 1.0 | VAD 动态断句：累积语音 0s 时所需停顿秒数（线性区间上限）。 |
 | `VAD_PAUSE_MIN` | 0.5 | VAD 动态断句：累积语音 ≥ `VAD_DYNAMIC_RANGE_END` 时所需停顿秒数（线性区间下限）。 |
 | `VAD_DYNAMIC_RANGE_END` | 20.0 | VAD 动态断句：线性递减区间终点（秒），超过此值使用 `VAD_PAUSE_MIN`。 |
@@ -308,8 +310,8 @@ python main.py
 - [x] 全局配置管理（`config.py`，环境变量驱动，代码内默认值，无配置文件依赖）
 - [x] JSON 结构化日志 + trace_id 上下文注入（`logging.py`）
 - [x] 请求/响应 Pydantic 数据模型（`schemas.py`，对齐 §3 接口协议）
-- [x] 流式 VAD 断句服务（`vad_service.py`，Silero VAD 动态批处理 + 动态停顿阈值 + 强制触发）
-- [x] VAD 全局批处理器（`vad_service.py`，`SileroVADBatchProcessor` 单例 + 外部状态管理 + asyncio 凑批推理）
+- [x] 流式 VAD 断句服务（`vad_service.py`，TEN-VAD 每连接独立实例 + 动态停顿阈值 + 强制触发）
+- [x] VAD 全局批处理器 → 已替换为 TEN-VAD 每连接独立实例架构
 - [x] 异步 ASR 推理服务（`asr_service.py`，httpx → vLLM OpenAI 兼容接口）
 - [x] ITN 多进程池（`itn_pool.py`，8 实例 spawn 模式 + Pool 内部负载均衡 + Queue 结果回传 + eager init 预热）
 - [x] WebSocket 全链路处理（`websocket.py`，握手→音频→断句→异步推理→推送）

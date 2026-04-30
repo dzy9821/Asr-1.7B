@@ -38,9 +38,13 @@ class Settings:
 
     # ---- ASR 音频填充 ----
     ASR_PAD_FRAMES: int = int(os.getenv("ASR_PAD_FRAMES", "5"))
-    """送给 ASR 时首尾各填充的静默帧数（每帧 512 samples = 32ms@16kHz）。"""
+    """送给 ASR 时首尾各填充的静默帧数（帧长 = VAD_HOP_SIZE samples）。"""
 
     # ---- VAD 动态断句阈值 ----
+    VAD_HOP_SIZE: int = int(os.getenv("VAD_HOP_SIZE", "640"))
+    """VAD 帧长（采样数），16kHz 下 640 = 40ms，对齐客户端发送间隔。"""
+    VAD_THRESHOLD: float = float(os.getenv("VAD_THRESHOLD", "0.5"))
+    """VAD 语音概率阈值 [0.0, 1.0]，>= 此值判定为语音帧。"""
     VAD_PAUSE_MAX: float = float(os.getenv("VAD_PAUSE_MAX", "1.0"))
     """累积语音 0s 时所需停顿（秒）。"""
     VAD_PAUSE_MIN: float = float(os.getenv("VAD_PAUSE_MIN", "0.5"))
