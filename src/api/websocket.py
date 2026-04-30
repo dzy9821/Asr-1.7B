@@ -47,7 +47,7 @@ from src.models.schemas import (
 from src.services.asr_service import ASRError, ASRService, build_hotword_context
 from src.services.itn_pool import ITNPool
 from src.services.vad_service import vad_processor
-from src.utils.audio import decode_base64_pcm, samples_to_cs, samples_to_ms
+from src.utils.audio import decode_base64_opus, decode_base64_pcm, samples_to_cs, samples_to_ms
 
 logger = get_logger(__name__)
 
@@ -181,8 +181,17 @@ async def _handle_audio_frame(
             base = build_hotword_context(settings.HOTWORDS)
             session.hotword_context = f"{base}\n{client_ctx}" if base else client_ctx
 
-    # Base64 解码
-    pcm_int16 = decode_base64_pcm(msg.payload.audio.audio)
+    # 解码音频（PCM 或 Opus → int16）
+    enc = msg.payload.audio.encoding
+    if enc == "opus":
+        pcm_int16 = decode_base64_opus(
+            msg.payload.audio.audio, session.get_opus_decoder()
+        )
+    elif enc is None:
+        pcm_int16 = decode_base64_pcm(msg.payload.audio.audio)
+    else:
+        logger.warning("Unsupported encoding %r, ignoring frame", enc)
+        return
 
     # 喂入 VAD（通过全局批处理器异步推理）
     segments = await session.vad.feed_audio(pcm_int16)

@@ -12,6 +12,7 @@ import string
 from src.core.config import settings
 from src.services.asr_service import build_hotword_context
 from src.services.vad_service import StreamingVADSession
+from src.utils.audio import OpusDecoder
 
 
 def _generate_sid() -> str:
@@ -55,6 +56,9 @@ class ASRSession:
 
         # 每连接独立的 VAD 会话（注册至全局批处理器）
         self.vad: StreamingVADSession = StreamingVADSession(sid=self.sid)
+
+        # Opus 解码器（延迟创建，仅 encoding=opus 的连接需要）
+        self._opus_decoder: OpusDecoder | None = None
 
         # ---- 异步 ASR 任务管理 ----
         # WebSocket 发送锁：防止多个并发 ASR 后台任务同时写入 WebSocket
@@ -104,9 +108,12 @@ class ASRSession:
         self._pending_asr_tasks.clear()
 
     def close(self) -> None:
-        """释放资源：取消后台任务 + 从 VAD 批处理器注销。"""
+        """释放资源：取消后台任务 + 从 VAD 批处理器注销 + 销毁 Opus 解码器。"""
         self.cancel_pending_asr()
         self.vad.close()
+        if self._opus_decoder is not None:
+            self._opus_decoder.close()
+            self._opus_decoder = None
 
     def next_seg_id(self) -> int:
         """获取当前段号并递增。"""
@@ -116,6 +123,12 @@ class ASRSession:
 
     def set_streaming(self) -> None:
         self.state = SessionState.STREAMING
+
+    def get_opus_decoder(self) -> OpusDecoder:
+        """获取或延迟创建当前连接的 Opus 解码器。"""
+        if self._opus_decoder is None:
+            self._opus_decoder = OpusDecoder()
+        return self._opus_decoder
 
     def set_closing(self) -> None:
         self.state = SessionState.CLOSING

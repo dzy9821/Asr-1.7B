@@ -25,7 +25,8 @@ class RequestHeader(BaseModel):
 
 
 class AudioPayload(BaseModel):
-    audio: str = Field(..., description="Base64 编码的 PCM 16k/16bit 音频数据")
+    audio: str = Field(..., description="Base64 编码的音频数据")
+    encoding: Optional[str] = Field(None, description="音频编码格式，不传或为 None 时按 PCM 16k/16bit 处理，opus 时按 Opus 编码处理")
 
 
 class TextPayload(BaseModel):
