@@ -3,69 +3,63 @@ services:
     build: .
     image: asr-service:latest
     container_name: asr-service
-    restart: always
+    restart: unless-stopped
 
     ports:
       - "18856:8000"    # ASR WebSocket（宿主 18856 → 容器 8000）
       - "15002:15002"   # vLLM 推理服务
 
     volumes:
-      # ASR 模型权重（只读挂载，不打入镜像）
-      # ⚠️ 部署前必须替换为实际路径，或在 .env 中设置 WEIGHTS_PATH
-      - ${WEIGHTS_PATH:-/path/to/weights}:/weights:ro
+      - /usr/local/dcmi:/usr/local/dcmi:ro
+      - /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro
+      - /usr/local/Ascend/driver/lib64/:/usr/local/Ascend/driver/lib64/:ro
+      - /usr/local/Ascend/driver/version.info:/usr/local/Ascend/driver/version.info:ro
+      - /etc/ascend_install.info:/etc/ascend_install.info:ro
+      - /home/wwx1465299/.cache/modelscope/hub/models/Qwen/Qwen3-ASR-1.7B:/weights:ro
 
     environment:
+      # ---- NPU 设备可见性 ----
+      ASCEND_VISIBLE_DEVICES: "6"
+      NPU_VISIBLE_DEVICES: "6"
       # ---- 服务 ----
-      - WS_HOST=0.0.0.0
-      - WS_PORT=8000
-      - MAX_CONNECTIONS=64
-      - HANDSHAKE_TIMEOUT=5
-      - WS_PING_INTERVAL=5
-      - WS_PING_TIMEOUT=20
-      - LOG_LEVEL=INFO
-
+      WS_HOST: "0.0.0.0"
+      WS_PORT: "8000"
+      MAX_CONNECTIONS: "64"
+      HANDSHAKE_TIMEOUT: "5"
+      WS_PING_INTERVAL: "5"
+      WS_PING_TIMEOUT: "20"
+      LOG_LEVEL: "INFO"
       # ---- vLLM ----
-      - VLLM_API_BASE=http://127.0.0.1:15002/v1
-      - VLLM_MODEL_NAME=Qwen3-ASR-1.7B
-      - VLLM_MODEL_PATH=/weights/Qwen3-ASR-1.7B
-      - VLLM_PORT=15002
-      - VLLM_TENSOR_PARALLEL_SIZE=1
-      - VLLM_MAX_MODEL_LEN=32768
-      - VLLM_GPU_MEMORY_UTILIZATION=0.9
-      - VLLM_EXTRA_ARGS=
-      - VLLM_STARTUP_TIMEOUT=300
-      - VLLM_HEALTH_CHECK_INTERVAL=5
-
-      # ---- NPU ----
-      - ASCEND_RT_VISIBLE_DEVICES=0
-
+      VLLM_API_BASE: "http://127.0.0.1:15002/v1"
+      VLLM_MODEL_NAME: "Qwen3-ASR-1.7B"
+      VLLM_MODEL_PATH: "/weights"
+      VLLM_PORT: "15002"
+      VLLM_TENSOR_PARALLEL_SIZE: "1"
+      VLLM_MAX_MODEL_LEN: "32768"
+      VLLM_GPU_MEMORY_UTILIZATION: "0.6"
+      VLLM_EXTRA_ARGS: ""
+      VLLM_STARTUP_TIMEOUT: "3000"
+      VLLM_HEALTH_CHECK_INTERVAL: "5"
       # ---- ITN ----
-      - ITN_WORKERS=8
-
+      ITN_WORKERS: "8"
       # ---- 热词 ----
-      - HOTWORDS=
-
+      HOTWORDS: ""
       # ---- VAD ----
-      - VAD_HOP_SIZE=640
-      - VAD_THRESHOLD=0.4
-      - VAD_PAUSE_MAX=0.7
-      - VAD_PAUSE_MIN=0.35
-      - VAD_DYNAMIC_RANGE_END=20.0
-      - VAD_MIN_SPEECH=0.5
-      - VAD_MAX_SPEECH=30.0
+      VAD_HOP_SIZE: "640"
+      VAD_THRESHOLD: "0.4"
+      VAD_PAUSE_MAX: "0.7"
+      VAD_PAUSE_MIN: "0.35"
+      VAD_DYNAMIC_RANGE_END: "20.0"
+      VAD_MIN_SPEECH: "0.5"
+      VAD_MAX_SPEECH: "30.0"
 
     devices:
-      # Ascend NPU 设备映射
-      - /dev/davinci0:/dev/davinci0
-      - /dev/davinci_manager:/dev/davinci_manager
-      - /dev/devmm_svm:/dev/devmm_svm
-      - /dev/hisi_hdc:/dev/hisi_hdc
+      - /dev/davinci2
+      - /dev/davinci_manager
+      - /dev/devmm_svm
+      - /dev/hisi_hdc
 
-    # 容器内需用 privileged 或配置 security_opt 才能访问 NPU
-    # privileged: true
-    # 或按需开启:
-    # security_opt:
-    #   - seccomp:unconfined
+    privileged: true
 
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:8000/api/v1/health"]
