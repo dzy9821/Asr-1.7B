@@ -28,10 +28,11 @@ class ITNProcessor:
 
         try:
             from itn.chinese.inverse_normalizer import InverseNormalizer
+        except ImportError:
+            raise
         except Exception as exc:
             raise ImportError(
-                "WeTextProcessing is required. Install it with: "
-                "pip install 'git+https://github.com/wenet-e2e/WeTextProcessing.git'"
+                "WeTextProcessing failed to load. Underlying error: {}".format(exc)
             ) from exc
 
         if self.lang == "zh":
