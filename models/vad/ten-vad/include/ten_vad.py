@@ -17,19 +17,24 @@ class TenVad:
         # Get the directory where this module is installed
         module_dir = os.path.dirname(os.path.abspath(__file__))
         
-        if platform.system() == "Linux" and platform.machine() == "x86_64":
-            # Try git repo structure first
-            git_path = os.path.join(module_dir, "../lib/Linux/x64/libten_vad.so")
-            # Try installed package structure (lib directory is inside the package)
-            pip_path = os.path.join(module_dir, "lib/Linux/x64/libten_vad.so")
-            
+        if platform.system() == "Linux":
+            if platform.machine() == "x86_64":
+                arch_dir = "x64"
+            elif platform.machine() in ("aarch64", "arm64"):
+                arch_dir = "aarch64"
+            else:
+                raise NotImplementedError(
+                    "Unsupported Linux arch: {}".format(platform.machine()))
+            git_path = os.path.join(module_dir, "../lib/Linux/{}/libten_vad.so".format(arch_dir))
+            pip_path = os.path.join(module_dir, "lib/Linux/{}/libten_vad.so".format(arch_dir))
             if os.path.exists(git_path):
                 self.vad_library = CDLL(git_path)
             elif os.path.exists(pip_path):
                 self.vad_library = CDLL(pip_path)
             else:
-                raise FileNotFoundError("Cannot find libten_vad.so at {} or {}".format(git_path, pip_path))
-                
+                raise FileNotFoundError(
+                    "Cannot find libten_vad.so at {} or {}".format(git_path, pip_path))
+
         elif platform.system() == "Darwin":
             # Try git repo structure first
             git_path = os.path.join(module_dir, "../lib/macOS/ten_vad.framework/Versions/A/ten_vad")

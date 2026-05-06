@@ -320,15 +320,14 @@ python main.py
 - [x] 会话状态机（`session.py`，sid 生成、seg_id 递增；每 Session 注册至 VAD 批处理器，close() 时注销）
 - [x] 健康探针与 Prometheus 指标暴露（`health.py`、`metrics.py`）
 - [x] 虚拟环境与依赖安装（含 WeTextProcessing + PyTorch），本地启动验证通过
-- [x] **[P0]** 端到端联调：连接远程 vLLM ASR，跑通完整管线
-- [x] **[P0]** VAD 流式断句验证：用真实音频验证 Silero VAD 断句准确性与时间戳
+- [x] 端到端联调：连接远程 vLLM ASR，跑通完整管线
+- [x] VAD 流式断句验证：用真实音频验证 Silero VAD 断句准确性与时间戳
+- [x] **[P1]** WebSocket 测试客户端脚本与并发压测脚本 (`ws_stress_test.py` / `client.java`)
+- [x] **[P2]** 异常恢复与重试策略 (vLLM 断连自动重试，阻塞操作移出 Event Loop)
+- [x] **[P2]** 多并发压力测试 (服务端不主动断开连接，避免读写冲突)
 
 ### 待完成
 
-- [x] **[P1]** WebSocket 测试客户端脚本与并发压测脚本 (`ws_stress_test.py` / `client.java`)
 - [ ] **[P1]** docker-compose.yaml：vLLM-Ascend 容器编排 + 环境变量注入
 - [ ] **[P1]** Dockerfile：镜像打包（代码+依赖），权重 Volume 挂载
-- [x] **[P2]** 异常恢复与重试策略 (vLLM 断连自动重试，阻塞操作移出 Event Loop)
-- [x] **[P2]** 多并发压力测试 (服务端不主动断开连接，避免读写冲突)
 - [ ] **[P2]** 单元测试覆盖
-- [ ] **[P3]** Grafana 监控面板
