@@ -27,7 +27,7 @@ ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
 
 # ---- 4. 安装 pynini + WeTextProcessing ----
 RUN pip install pynini==2.1.6 && \
-    pip install 'git+https://github.com/wenet-e2e/WeTextProcessing.git'
+    GIT_SSL_NO_VERIFY=1 pip install 'git+https://github.com/wenet-e2e/WeTextProcessing.git'
 
 # ---- 5. 安装项目 Python 依赖（torch 系已内置，跳过） ----
 RUN pip install \
