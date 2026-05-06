@@ -42,7 +42,12 @@ RUN pip install \
     "prometheus-client>=0.21.0" \
     "soundfile>=0.12.0"
 
-# ---- 6. 复制项目 ----
+# ---- 6. 运行时系统库（放在 pip install 之后保留缓存） ----
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libopus0 libsndfile1 && \
+    rm -rf /var/lib/apt/lists/*
+
+# ---- 7. 复制项目 ----
 WORKDIR /app
 COPY . .
 
