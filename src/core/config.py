@@ -20,9 +20,29 @@ class Settings:
     ITN_WORKERS: int = int(os.getenv("ITN_WORKERS", "8"))
 
     # ---- vLLM ----
-    VLLM_API_BASE: str = os.getenv("VLLM_API_BASE", "http://10.23.32.171:15002/v1")
+    VLLM_PORT: int = int(os.getenv("VLLM_PORT", "15002"))
+    VLLM_API_BASE: str = os.getenv(
+        "VLLM_API_BASE", f"http://127.0.0.1:{VLLM_PORT}/v1"
+    )
     VLLM_MODEL_NAME: str = os.getenv("VLLM_MODEL_NAME", "Qwen3-ASR-1.7B")
     VLLM_API_KEY: str = os.getenv("VLLM_API_KEY", "EMPTY")
+    VLLM_MODEL_PATH: str = os.getenv(
+        "VLLM_MODEL_PATH", "/weights/Qwen3-ASR-1.7B"
+    )
+    VLLM_TENSOR_PARALLEL_SIZE: int = int(
+        os.getenv("VLLM_TENSOR_PARALLEL_SIZE", "1")
+    )
+    VLLM_MAX_MODEL_LEN: int = int(os.getenv("VLLM_MAX_MODEL_LEN", "32768"))
+    VLLM_GPU_MEMORY_UTILIZATION: float = float(
+        os.getenv("VLLM_GPU_MEMORY_UTILIZATION", "0.9")
+    )
+    VLLM_EXTRA_ARGS: str = os.getenv("VLLM_EXTRA_ARGS", "")
+    VLLM_STARTUP_TIMEOUT: int = int(os.getenv("VLLM_STARTUP_TIMEOUT", "300"))
+    """vLLM 启动超时（秒）。"""
+    VLLM_HEALTH_CHECK_INTERVAL: float = float(
+        os.getenv("VLLM_HEALTH_CHECK_INTERVAL", "5")
+    )
+    """vLLM 健康检查间隔（秒）。"""
 
     # ---- NPU ----
     ASCEND_RT_VISIBLE_DEVICES: str = os.getenv("ASCEND_RT_VISIBLE_DEVICES", "0")

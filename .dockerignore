@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.claude/
+.gemini/
+test/
+*.wav
+*.md
+
+# Silero VAD 仓库中不需要的部分
+models/vad/silero-vad/.github/
+models/vad/silero-vad/examples/
+models/vad/silero-vad/tests/
+models/vad/silero-vad/tuning/
+models/vad/silero-vad/*.md
+
