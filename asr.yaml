@@ -21,6 +21,7 @@ services:
       # ---- NPU 设备可见性 ----
       ASCEND_VISIBLE_DEVICES: "6"
       NPU_VISIBLE_DEVICES: "6"
+      ASCEND_RT_VISIBLE_DEVICES: "6"
       # ---- 服务 ----
       WS_HOST: "0.0.0.0"
       WS_PORT: "8000"
