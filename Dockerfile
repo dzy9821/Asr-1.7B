@@ -29,9 +29,9 @@ ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
 RUN pip install pynini==2.1.6 && \
     GIT_SSL_NO_VERIFY=1 pip install 'git+https://github.com/wenet-e2e/WeTextProcessing.git'
 
-# ---- 5. 安装项目 Python 依赖（torch 系已内置，跳过） ----
+# ---- 5. 安装项目 Python 依赖（torch/vllm 已内置，不要重装以免破坏兼容） ----
 RUN pip install \
-    "vllm[audio]" \
+    "librosa" \
     "torchaudio>=2.0.0" \
     "fastapi>=0.115.0" \
     "websockets>=12.0" \
