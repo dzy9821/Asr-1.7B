@@ -29,6 +29,9 @@ ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
 RUN pip install pynini==2.1.6 && \
     GIT_SSL_NO_VERIFY=1 pip install 'git+https://github.com/wenet-e2e/WeTextProcessing.git'
 
+# ---- 4.5. 安装 Qwen3-ASR 音频处理依赖（必须，否则 vLLM 处理 audio_url 返回 400） ----
+RUN pip install --no-deps 'qwen-asr[vllm]'
+
 # ---- 5. 安装项目 Python 依赖（torch/vllm 已内置，不要重装以免破坏兼容） ----
 RUN pip install \
     "librosa" \
