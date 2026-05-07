@@ -52,22 +52,15 @@ RUN apt-get update && \
 
 # ---- 7. 复制项目 ----
 WORKDIR /app
-COPY . .
+COPY main.py .
+COPY src/ ./src/
+COPY models/ ./models/
 
-# ---- 7. ONNX 模型软链接（VAD 需要的相对路径） ----
+# ---- 8. ONNX 模型软链接（VAD 需要的相对路径） ----
 RUN ln -sf models/vad/ten-vad/onnx_model onnx_model
 
-# ---- 8. VAD 原生库路径 ----
+# ---- 9. VAD 原生库路径 ----
 ENV LD_LIBRARY_PATH=/app/models/vad/ten-vad/lib/Linux/aarch64:/usr/local/lib:${LD_LIBRARY_PATH}
-
-# ---- 9. vLLM 默认配置（容器内回环访问） ----
-ENV VLLM_API_BASE=http://127.0.0.1:15002/v1
 
 # ---- 10. 清除构建代理（避免泄露到运行时） ----
 ENV http_proxy="" https_proxy="" no_proxy=""
-
-# ---- 11. 端口（仅声明，实际映射在 docker-compose 中配置） ----
-EXPOSE 8000 15002
-
-# ---- 12. 启动 ----
-CMD ["python", "main.py"]

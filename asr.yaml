@@ -74,3 +74,5 @@ services:
       options:
         max-size: "100m"
         max-file: "3"
+        
+    command: ["python", "main.py"]
