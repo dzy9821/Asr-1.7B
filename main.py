@@ -151,7 +151,8 @@ async def _health_monitor() -> None:
 
             # HTTP 级检查
             try:
-                r = await client.get(health_url)
+                # 添加 Connection: close 防止 vLLM(uvicorn) 的 5s keep-alive 机制导致连接断开抛出 RemoteProtocolError
+                r = await client.get(health_url, headers={"Connection": "close"})
                 if r.status_code == 200:
                     if consecutive_failures > 0:
                         logger.info("vLLM health recovered after %d failures", consecutive_failures)
